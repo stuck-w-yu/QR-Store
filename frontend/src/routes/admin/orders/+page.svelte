@@ -4,13 +4,25 @@
 	import type { Order, OrderStatus } from '$lib/types';
 	import { 
 		ShoppingCart, RefreshCw, Eye, XCircle, 
-		Clock, CheckCircle, AlertCircle, Filter 
+		Clock, CheckCircle, AlertCircle, Filter,
+		RotateCcw, Ban
 	} from '@lucide/svelte';
 
 	let orders = $state<Order[]>([]);
 	let loading = $state(true);
 	let selectedStatus = $state<string>('');
 	let selectedOrder = $state<Order | null>(null);
+
+	// Refund Modal State
+	let refundModalOrder = $state<Order | null>(null);
+	let refundAmount = $state(0);
+	let refundReason = $state('');
+	let refundSubmitting = $state(false);
+
+	// Void Modal State
+	let voidModalOrder = $state<Order | null>(null);
+	let voidReason = $state('');
+	let voidSubmitting = $state(false);
 
 	async function loadOrders() {
 		try {
@@ -22,6 +34,66 @@
 			console.error('Failed to load orders', e);
 		} finally {
 			loading = false;
+		}
+	}
+
+	function openRefundModal(o: Order) {
+		refundModalOrder = o;
+		refundAmount = o.total;
+		refundReason = '';
+	}
+
+	async function handleProcessRefund() {
+		if (!refundModalOrder) return;
+		if (refundAmount <= 0 || refundAmount > refundModalOrder.total) {
+			alert('Nominal refund tidak valid');
+			return;
+		}
+		if (!refundReason.trim()) {
+			alert('Alasan refund wajib diisi');
+			return;
+		}
+
+		refundSubmitting = true;
+		try {
+			await api.post(`/orders/${refundModalOrder.id}/refund`, {
+				amount: refundAmount,
+				reason: refundReason
+			});
+			refundModalOrder = null;
+			await loadOrders();
+			alert('Refund berhasil diproses');
+		} catch (e: any) {
+			alert(e?.message || 'Gagal memproses refund');
+		} finally {
+			refundSubmitting = false;
+		}
+	}
+
+	function openVoidModal(o: Order) {
+		voidModalOrder = o;
+		voidReason = '';
+	}
+
+	async function handleProcessVoid() {
+		if (!voidModalOrder) return;
+		if (!voidReason.trim()) {
+			alert('Alasan void/pembatalan wajib diisi');
+			return;
+		}
+
+		voidSubmitting = true;
+		try {
+			await api.post(`/orders/${voidModalOrder.id}/void`, {
+				reason: voidReason
+			});
+			voidModalOrder = null;
+			await loadOrders();
+			alert('Pesanan berhasil divoid');
+		} catch (e: any) {
+			alert(e?.message || 'Gagal melakukan void');
+		} finally {
+			voidSubmitting = false;
 		}
 	}
 
@@ -132,7 +204,7 @@
 								<td class="p-4 text-slate-400 font-mono text-[11px]">
 									{new Date(o.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
 								</td>
-								<td class="p-4 pr-6 text-right space-x-2">
+								<td class="p-4 pr-6 text-right space-x-1.5">
 									<button
 										type="button"
 										onclick={() => (selectedOrder = o)}
@@ -142,14 +214,25 @@
 										<Eye class="w-3.5 h-3.5" />
 									</button>
 
+									{#if o.status === 'CONFIRMED' || o.status === 'PREPARING' || o.status === 'READY' || o.status === 'COMPLETED'}
+										<button
+											type="button"
+											onclick={() => openRefundModal(o)}
+											class="p-1.5 rounded-lg bg-orange-50 hover:bg-orange-100 text-orange-600 transition-colors"
+											title="Refund Transaksi"
+										>
+											<RotateCcw class="w-3.5 h-3.5" />
+										</button>
+									{/if}
+
 									{#if o.status !== 'COMPLETED' && o.status !== 'CANCELLED'}
 										<button
 											type="button"
-											onclick={() => handleCancelOrder(o.id)}
+											onclick={() => openVoidModal(o)}
 											class="p-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 transition-colors"
-											title="Batalkan Pesanan"
+											title="Void / Batalkan Pesanan"
 										>
-											<XCircle class="w-3.5 h-3.5" />
+											<Ban class="w-3.5 h-3.5" />
 										</button>
 									{/if}
 								</td>
@@ -205,6 +288,132 @@
 					<div class="flex justify-between font-bold text-sm text-slate-900 pt-1">
 						<span>Total</span>
 						<span class="text-orange-600 font-extrabold font-['Outfit']">{formatRupiah(selectedOrder.total)}</span>
+					</div>
+				</div>
+			</div>
+		</div>
+	{/if}
+
+	<!-- Refund Modal -->
+	{#if refundModalOrder}
+		<div class="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+			<div class="bg-white rounded-3xl p-6 sm:p-7 w-full max-w-md space-y-5 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+				<div class="flex items-start justify-between border-b border-slate-100 pb-3">
+					<div>
+						<h3 class="text-base font-extrabold text-slate-900">Refund Transaksi Pesanan</h3>
+						<span class="text-xs font-mono text-slate-400 font-bold block">{refundModalOrder.order_number}</span>
+					</div>
+					<button
+						type="button"
+						onclick={() => (refundModalOrder = null)}
+						class="text-slate-400 hover:text-slate-600 text-xs font-bold"
+					>
+						✕
+					</button>
+				</div>
+
+				<div class="space-y-4 text-xs font-medium">
+					<div class="space-y-1.5">
+						<label for="ref-amount" class="font-bold text-slate-700">Nominal Pengembalian Dana</label>
+						<div class="relative">
+							<span class="absolute left-3.5 top-2.5 font-bold text-slate-400">Rp</span>
+							<input
+								id="ref-amount"
+								type="number"
+								min="1"
+								max={refundModalOrder.total}
+								bind:value={refundAmount}
+								class="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-slate-200 font-bold focus:outline-none focus:border-orange-500"
+							/>
+						</div>
+						<p class="text-[11px] text-slate-400">Maksimum refund: {formatRupiah(refundModalOrder.total)}</p>
+					</div>
+
+					<div class="space-y-1.5">
+						<label for="ref-reason" class="font-bold text-slate-700">Alasan Refund</label>
+						<textarea
+							id="ref-reason"
+							bind:value={refundReason}
+							rows="2"
+							class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-orange-500"
+							placeholder="Contoh: Menu habis atau pembatalan atas permintaan pelanggan"
+							required
+						></textarea>
+					</div>
+
+					<div class="pt-3 flex items-center justify-end gap-3 border-t border-slate-100">
+						<button
+							type="button"
+							onclick={() => (refundModalOrder = null)}
+							class="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-xl font-bold transition-colors"
+						>
+							Batal
+						</button>
+						<button
+							type="button"
+							onclick={handleProcessRefund}
+							disabled={refundSubmitting}
+							class="px-5 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-xl font-bold shadow-md shadow-orange-600/20 disabled:opacity-50 transition-all"
+						>
+							{refundSubmitting ? 'Memproses...' : 'Proses Refund'}
+						</button>
+					</div>
+				</div>
+			</div>
+		</div>
+	{/if}
+
+	<!-- Void Modal -->
+	{#if voidModalOrder}
+		<div class="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+			<div class="bg-white rounded-3xl p-6 sm:p-7 w-full max-w-md space-y-5 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+				<div class="flex items-start justify-between border-b border-slate-100 pb-3">
+					<div>
+						<h3 class="text-base font-extrabold text-slate-900">Void / Batalkan Pesanan</h3>
+						<span class="text-xs font-mono text-slate-400 font-bold block">{voidModalOrder.order_number}</span>
+					</div>
+					<button
+						type="button"
+						onclick={() => (voidModalOrder = null)}
+						class="text-slate-400 hover:text-slate-600 text-xs font-bold"
+					>
+						✕
+					</button>
+				</div>
+
+				<div class="space-y-4 text-xs font-medium">
+					<div class="p-3 bg-red-50 border border-red-200 rounded-xl text-[11px] text-red-800 leading-relaxed font-semibold">
+						Pesanan akan dibatalkan (VOID) dan tercatat dalam ledger rekonsiliasi kasir aktif & audit trail.
+					</div>
+
+					<div class="space-y-1.5">
+						<label for="void-reason" class="font-bold text-slate-700">Alasan Void</label>
+						<textarea
+							id="void-reason"
+							bind:value={voidReason}
+							rows="2"
+							class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-orange-500"
+							placeholder="Contoh: Pesanan ganda (duplicate order) atau salah input meja"
+							required
+						></textarea>
+					</div>
+
+					<div class="pt-3 flex items-center justify-end gap-3 border-t border-slate-100">
+						<button
+							type="button"
+							onclick={() => (voidModalOrder = null)}
+							class="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-xl font-bold transition-colors"
+						>
+							Batal
+						</button>
+						<button
+							type="button"
+							onclick={handleProcessVoid}
+							disabled={voidSubmitting}
+							class="px-5 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold shadow-md shadow-red-600/20 disabled:opacity-50 transition-all"
+						>
+							{voidSubmitting ? 'Memproses...' : 'Konfirmasi Void'}
+						</button>
 					</div>
 				</div>
 			</div>
