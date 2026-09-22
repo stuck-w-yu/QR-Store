@@ -1,0 +1,27 @@
+:80 {
+    # Real-time WebSocket connection
+    handle /ws* {
+        reverse_proxy backend:8080
+    }
+
+    # REST API Endpoints
+    handle /api/* {
+        reverse_proxy backend:8080
+    }
+
+    # Public Health Check
+    handle /health* {
+        reverse_proxy backend:8080
+    }
+
+    # SvelteKit Web Application
+    handle {
+        reverse_proxy frontend:3000
+    }
+
+    encode zstd gzip
+    log {
+        output stdout
+        format json
+    }
+}
