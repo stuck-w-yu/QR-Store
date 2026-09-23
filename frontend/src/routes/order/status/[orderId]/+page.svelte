@@ -184,7 +184,7 @@
 			</div>
 		{:else if order}
 			<!-- Order Header Card -->
-			<div class="bg-gradient-to-br from-slate-900 via-slate-800 to-orange-950 text-white rounded-3xl p-5 shadow-lg relative overflow-hidden">
+			<div class="bg-linear-to-br from-slate-900 via-slate-800 to-orange-950 text-white rounded-3xl p-5 shadow-lg relative overflow-hidden">
 				<div class="absolute -right-8 -bottom-8 w-32 h-32 bg-orange-500/20 rounded-full blur-2xl"></div>
 
 				<div class="flex items-start justify-between relative z-10">

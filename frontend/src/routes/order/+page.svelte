@@ -122,7 +122,7 @@
 		</div>
 	{:else if tableInfo}
 		<!-- Restaurant Header Banner -->
-		<header class="bg-gradient-to-br from-slate-900 via-slate-800 to-orange-950 text-white pt-8 pb-14 px-4 relative overflow-hidden">
+		<header class="bg-linear-to-br from-slate-900 via-slate-800 to-orange-950 text-white pt-8 pb-14 px-4 relative overflow-hidden">
 			<div class="absolute -right-10 -bottom-10 w-48 h-48 bg-orange-500/20 rounded-full blur-3xl pointer-events-none"></div>
 			
 			<div class="max-w-lg mx-auto flex items-center justify-between relative z-10">

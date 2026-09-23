@@ -7,12 +7,12 @@
 
 <div class="min-h-screen bg-slate-900 text-white selection:bg-orange-500 font-['Plus_Jakarta_Sans',sans-serif] relative overflow-hidden">
 	<!-- Ambient Background Glows -->
-	<div class="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[500px] bg-gradient-to-b from-orange-600/20 to-transparent blur-3xl pointer-events-none"></div>
+	<div class="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[500px] bg-linear-to-b from-orange-600/20 to-transparent blur-3xl pointer-events-none"></div>
 
 	<!-- Navigation Bar -->
 	<header class="max-w-6xl mx-auto p-6 flex items-center justify-between relative z-10">
 		<div class="flex items-center gap-3">
-			<div class="w-11 h-11 rounded-2xl bg-gradient-to-tr from-orange-600 to-amber-500 flex items-center justify-center shadow-lg shadow-orange-500/30">
+			<div class="w-11 h-11 rounded-2xl bg-linear-to-tr from-orange-600 to-amber-500 flex items-center justify-center shadow-lg shadow-orange-500/30">
 				<Store class="w-6 h-6 text-white" />
 			</div>
 			<div>
@@ -46,7 +46,7 @@
 
 		<h1 class="text-4xl sm:text-6xl font-black font-['Outfit'] tracking-tight max-w-3xl mx-auto leading-[1.15]">
 			Solusi Digitalisasi Restoran <br class="hidden sm:inline" />
-			<span class="bg-gradient-to-r from-orange-400 via-amber-300 to-yellow-400 bg-clip-text text-transparent">
+			<span class="bg-linear-to-r from-orange-400 via-amber-300 to-yellow-400 bg-clip-text text-transparent">
 				Cepat, Praktis, & Real-time
 			</span>
 		</h1>

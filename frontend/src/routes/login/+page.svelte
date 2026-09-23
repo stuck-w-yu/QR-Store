@@ -35,7 +35,7 @@
 <div class="min-h-screen bg-slate-100 flex items-center justify-center p-4">
 	<div class="bg-white w-full max-w-md rounded-3xl p-8 shadow-xl border border-slate-200/80 space-y-6">
 		<div class="text-center space-y-2">
-			<div class="w-14 h-14 bg-gradient-to-tr from-orange-600 to-amber-500 rounded-2xl flex items-center justify-center mx-auto shadow-lg shadow-orange-500/30 text-white">
+			<div class="w-14 h-14 bg-linear-to-tr from-orange-600 to-amber-500 rounded-2xl flex items-center justify-center mx-auto shadow-lg shadow-orange-500/30 text-white">
 				<Store class="w-8 h-8" />
 			</div>
 			<h1 class="text-2xl font-black text-slate-900 font-['Outfit']">Staff Portal</h1>
