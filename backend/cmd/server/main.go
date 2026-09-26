@@ -31,9 +31,7 @@ func main() {
 	cfg := configs.LoadConfig()
 	logger.Init(cfg.AppEnv)
 
-	if cfg.AppEnv == "production" {
-		gin.SetMode(gin.ReleaseMode)
-	}
+	gin.SetMode(gin.ReleaseMode)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -93,7 +91,27 @@ func main() {
 	cashierHandler := cashier.NewHandler(cashierService, authService)
 
 	// Router setup
-	r := gin.Default()
+	r := gin.New()
+	r.Use(gin.Recovery())
+
+	// HTTP Access Logger
+	r.Use(func(c *gin.Context) {
+		start := time.Now()
+		path := c.Request.URL.Path
+		raw := c.Request.URL.RawQuery
+		if raw != "" {
+			path = path + "?" + raw
+		}
+
+		c.Next()
+
+		latency := time.Since(start)
+		status := c.Writer.Status()
+		method := c.Request.Method
+		clientIP := c.ClientIP()
+
+		logger.LogHTTP(status, method, path, latency, clientIP)
+	})
 
 	// CORS Middleware
 	corsOrigins := strings.Split(cfg.CORSOrigins, ",")
@@ -167,7 +185,7 @@ func main() {
 	}
 
 	go func() {
-		logger.Log.Info("server starting", "port", cfg.AppPort)
+		logger.PrintBanner(cfg.AppPort, cfg.AppEnv, "Connected (PostgreSQL)", cfg.CORSOrigins)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logger.Log.Error("listen error", "error", err)
 		}
