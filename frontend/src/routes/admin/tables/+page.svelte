@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { api } from '$lib/api/client';
-	import { getTableQRCodeDataURL } from '$lib/api/mock';
+	import { getTableQRCodeDataURL } from '$lib/utils/qr';
 	import type { Table } from '$lib/types';
 	import { 
 		Plus, QrCode, Download, RefreshCw, Trash2, 
@@ -122,7 +122,7 @@
 					<div class="flex items-start justify-between">
 						<div>
 							<h3 class="font-bold text-base text-slate-900">{table.name}</h3>
-							<span class="text-[11px] font-mono text-slate-400 block mt-0.5 truncate max-w-[140px]">
+							<span class="text-[11px] font-mono text-slate-400 block mt-0.5 truncate max-w-35">
 								{table.qr_token}
 							</span>
 						</div>

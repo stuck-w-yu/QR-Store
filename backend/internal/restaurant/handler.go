@@ -24,8 +24,8 @@ func (h *Handler) RegisterRoutes(r *gin.RouterGroup) {
 		resto.PATCH("/:id", auth.RequireRoles(auth.RoleOwner, auth.RoleAdmin), h.Update)
 	}
 
-	// Public restaurant detail by slug
-	r.GET("/public/restaurants/:slug", h.GetPublicBySlug)
+	// Public restaurant detail by ID or slug
+	r.GET("/public/restaurants/:restaurant_id", h.GetPublicBySlug)
 }
 
 func (h *Handler) GetByID(c *gin.Context) {
@@ -50,8 +50,11 @@ func (h *Handler) GetByID(c *gin.Context) {
 }
 
 func (h *Handler) GetPublicBySlug(c *gin.Context) {
-	slug := c.Param("slug")
-	resto, err := h.repo.GetBySlug(c.Request.Context(), slug)
+	idOrSlug := c.Param("restaurant_id")
+	resto, err := h.repo.GetByID(c.Request.Context(), idOrSlug)
+	if err != nil {
+		resto, err = h.repo.GetBySlug(c.Request.Context(), idOrSlug)
+	}
 	if err != nil {
 		if errors.Is(err, ErrRestaurantNotFound) {
 			response.NotFound(c, "RESTAURANT_NOT_FOUND", "Restaurant not found")

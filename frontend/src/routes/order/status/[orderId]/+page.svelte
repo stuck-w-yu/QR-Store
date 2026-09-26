@@ -2,7 +2,6 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { page } from '$app/state';
 	import { api, formatRupiah } from '$lib/api/client';
-	import { mockSubscribe } from '$lib/api/mock';
 	import type { Order, Payment } from '$lib/types';
 	import confetti from 'canvas-confetti';
 	import { 
@@ -61,23 +60,6 @@
 	}
 
 	function connectWebSocket() {
-		// 1. Mock Realtime Bus (Cross-tab instant sync)
-		const unsubscribeMock = mockSubscribe(`order:${orderId}`, (msg) => {
-			if (msg.event === 'ORDER_STATUS_CHANGED' || msg.event === 'PAYMENT_PAID') {
-				if (msg.data?.order) {
-					const prevStatus = order?.status;
-					order = msg.data.order;
-
-					if (prevStatus === 'WAITING_PAYMENT' && order?.status === 'CONFIRMED') {
-						confetti({ particleCount: 80, spread: 60, origin: { y: 0.6 } });
-					} else if (order?.status === 'READY') {
-						confetti({ particleCount: 120, spread: 80, origin: { y: 0.5 } });
-					}
-				}
-			}
-		});
-
-		// 2. Real Backend WebSocket (when backend is running)
 		const wsURL = import.meta.env.VITE_WS_URL || 'ws://localhost:8080/ws';
 		const channel = `order:${orderId}`;
 
@@ -117,10 +99,8 @@
 				}, 3000);
 			};
 		} catch (e) {
-			// ws failed, mock bus will handle it
+			console.error('Failed to connect order WebSocket', e);
 		}
-
-		return unsubscribeMock;
 	}
 
 	async function handleSimulatePayment() {
@@ -270,7 +250,7 @@
 									: 'bg-white border-slate-300 text-slate-300'}"
 							>
 								{#if isPast}
-									<Check class="w-3.5 h-3.5 stroke-[3]" />
+									<Check class="w-3.5 h-3.5 stroke-3" />
 								{:else}
 									<span class="text-[11px]">{idx + 1}</span>
 								{/if}

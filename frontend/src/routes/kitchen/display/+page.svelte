@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import { api } from '$lib/api/client';
-	import { mockSubscribe } from '$lib/api/mock';
 	import { auth } from '$lib/stores/auth.svelte';
 	import type { Order } from '$lib/types';
 	import { 
@@ -54,15 +53,6 @@
 		const restoId = auth.user?.restaurant_id || 'rst_nusantara';
 		const channel = `restaurant:${restoId}:kitchen`;
 
-		// 1. Mock Realtime Bus
-		mockSubscribe(channel, (msg) => {
-			if (msg.event === 'NEW_ORDER_CONFIRMED' || msg.event === 'ORDER_STATUS_CHANGED') {
-				playChime();
-				loadOrders();
-			}
-		});
-
-		// 2. Real WebSocket
 		const wsURL = import.meta.env.VITE_WS_URL || 'ws://localhost:8080/ws';
 		try {
 			ws = new WebSocket(`${wsURL}?channel=${channel}`);
@@ -87,7 +77,7 @@
 				}, 3000);
 			};
 		} catch (e) {
-			// ws failed, mock bus will handle it
+			console.error('Failed to connect WebSocket in kitchen', e);
 		}
 	}
 
