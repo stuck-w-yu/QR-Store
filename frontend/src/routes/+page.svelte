@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { 
 		QrCode, ChefHat, LayoutDashboard, Utensils, 
-		CheckCircle, ArrowRight, Store, ShieldCheck, Zap 
+		CheckCircle, ArrowRight, Store, ShieldCheck, Zap, Sparkles 
 	} from '@lucide/svelte';
 </script>
 
@@ -22,6 +22,13 @@
 		</div>
 
 		<div class="flex items-center gap-2 sm:gap-3 shrink-0">
+			<a
+				href="/superadmin"
+				class="text-xs font-bold text-indigo-300 hover:text-indigo-200 bg-indigo-950/60 border border-indigo-700/50 px-2.5 sm:px-3 py-1.5 rounded-xl transition-colors hidden sm:inline-flex items-center gap-1.5"
+			>
+				<Sparkles class="w-3.5 h-3.5 text-indigo-400" />
+				<span>Superadmin HQ</span>
+			</a>
 			<a
 				href="/login"
 				class="text-xs font-bold text-slate-300 hover:text-white px-2.5 sm:px-4 py-2 rounded-xl transition-colors"
@@ -132,6 +139,38 @@
 				</div>
 			</a>
 		</div>
+
+		<!-- 4. Superadmin Platform Console Banner -->
+		<a
+			href="/superadmin"
+			class="block bg-linear-to-r from-indigo-950/80 via-slate-900 to-purple-950/80 border border-indigo-500/30 hover:border-indigo-400/70 rounded-3xl p-6 sm:p-7 text-left transition-all duration-200 hover:-translate-y-1 shadow-xl hover:shadow-indigo-500/10 group relative overflow-hidden"
+		>
+			<div class="absolute -right-8 -bottom-8 w-48 h-48 bg-indigo-500/10 rounded-full blur-2xl pointer-events-none"></div>
+			<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-5 relative z-10">
+				<div class="flex items-start gap-4">
+					<div class="w-12 h-12 rounded-2xl bg-indigo-600/30 border border-indigo-500/40 text-indigo-400 flex items-center justify-center shrink-0">
+						<Sparkles class="w-6 h-6" />
+					</div>
+					<div>
+						<div class="flex items-center gap-2">
+							<h3 class="font-bold text-lg text-white font-['Outfit'] group-hover:text-indigo-300 transition-colors">
+								Superadmin HQ & Tenant Console
+							</h3>
+							<span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 uppercase tracking-wide">
+								NEW
+							</span>
+						</div>
+						<p class="text-xs text-slate-400 mt-1 max-w-2xl leading-relaxed">
+							Monitoring metrik platform QR Store se-Indonesia, GMV nasional, pembekuan status outlet (freeze/suspend), konfigurasi paket langganan (Starter, Pro, Enterprise), serta pendaftaran business owner & cabang restoran baru secara otomatis.
+						</p>
+					</div>
+				</div>
+				<div class="flex items-center gap-2 text-xs font-bold text-indigo-400 group-hover:translate-x-1 transition-transform shrink-0">
+					<span>Buka Superadmin Console</span>
+					<ArrowRight class="w-4 h-4" />
+				</div>
+			</div>
+		</a>
 
 		<!-- System Architecture Highlights -->
 		<div class="pt-16 border-t border-slate-800 grid grid-cols-2 sm:grid-cols-4 gap-6 text-slate-400 text-xs">

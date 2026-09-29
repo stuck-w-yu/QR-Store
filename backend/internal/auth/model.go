@@ -5,10 +5,11 @@ import "time"
 type Role string
 
 const (
-	RoleOwner   Role = "OWNER"
-	RoleAdmin   Role = "ADMIN"
-	RoleCashier Role = "CASHIER"
-	RoleKitchen Role = "KITCHEN"
+	RoleSuperadmin Role = "SUPERADMIN"
+	RoleOwner      Role = "OWNER"
+	RoleAdmin      Role = "ADMIN"
+	RoleCashier    Role = "CASHIER"
+	RoleKitchen    Role = "KITCHEN"
 )
 
 type User struct {

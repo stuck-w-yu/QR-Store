@@ -1,4 +1,4 @@
-export type Role = 'OWNER' | 'ADMIN' | 'CASHIER' | 'KITCHEN';
+export type Role = 'SUPERADMIN' | 'OWNER' | 'ADMIN' | 'CASHIER' | 'KITCHEN';
 
 export interface User {
 	id: string;
@@ -19,6 +19,29 @@ export interface Restaurant {
 	tax_percent: number;
 	service_percent: number;
 	status: string;
+	plan?: string;
+	created_at?: string;
+	updated_at?: string;
+}
+
+export interface TenantSummary extends Restaurant {
+	plan: string;
+	owner_name: string;
+	owner_email: string;
+	owner_phone: string;
+	total_tables: number;
+	total_menus: number;
+	total_orders: number;
+	total_revenue: number;
+}
+
+export interface PlatformStats {
+	total_restaurants: number;
+	active_restaurants: number;
+	suspended_restaurants: number;
+	total_owners: number;
+	total_orders: number;
+	total_revenue: number;
 }
 
 export interface Table {

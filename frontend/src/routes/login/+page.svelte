@@ -14,7 +14,9 @@
 			loading = true;
 			error = null;
 			const user = await auth.login(email, password);
-			if (user.role === 'KITCHEN') {
+			if (user.role === 'SUPERADMIN') {
+				goto('/superadmin');
+			} else if (user.role === 'KITCHEN') {
 				goto('/kitchen/display');
 			} else {
 				goto('/admin/dashboard');
@@ -97,6 +99,23 @@
 			<span class="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2.5 text-center">
 				Akun Demo Siap Pakai
 			</span>
+
+			<button
+				type="button"
+				onclick={() => quickSelectRole('superadmin@qrstore.id')}
+				class="w-full mb-2.5 p-2.5 rounded-xl border border-indigo-200 bg-indigo-50/80 hover:border-indigo-500 text-left transition-colors font-medium flex items-center justify-between group"
+			>
+				<div>
+					<div class="font-bold text-indigo-950 flex items-center gap-1.5 text-xs">
+						<span>👑 Superadmin Platform</span>
+					</div>
+					<div class="text-[10px] text-indigo-600 font-mono">superadmin@qrstore.id</div>
+				</div>
+				<span class="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-md bg-indigo-600 text-white group-hover:bg-indigo-700 transition-colors">
+					Central
+				</span>
+			</button>
+
 			<div class="grid grid-cols-2 gap-2 text-xs">
 				<button
 					type="button"

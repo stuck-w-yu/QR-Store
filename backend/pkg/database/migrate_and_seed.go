@@ -19,6 +19,22 @@ func RunMigrationsAndSeed(ctx context.Context, db *DB) error {
 		return fmt.Errorf("failed to run migrations: %w", err)
 	}
 
+	// Ensure new schema columns exist
+	_, _ = db.Pool.Exec(ctx, "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS plan VARCHAR(50) DEFAULT 'PRO'")
+
+	// Ensure Superadmin user exists
+	var superadminCount int
+	_ = db.Pool.QueryRow(ctx, "SELECT COUNT(*) FROM users WHERE role = 'SUPERADMIN'").Scan(&superadminCount)
+	if superadminCount == 0 {
+		hash, _ := bcrypt.GenerateFromPassword([]byte("password123"), bcrypt.DefaultCost)
+		_, _ = db.Pool.Exec(ctx, `
+			INSERT INTO users (id, restaurant_id, name, email, password_hash, role, status, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+			ON CONFLICT (email) DO NOTHING
+		`, "usr_superadmin", "rst_nusantara", "Super Administrator", "superadmin@qrstore.id", string(hash), "SUPERADMIN", "ACTIVE", time.Now(), time.Now())
+		logger.Log.Info("seeded default superadmin user (superadmin@qrstore.id)")
+	}
+
 	// Check if seeded
 	var count int
 	err := db.Pool.QueryRow(ctx, "SELECT COUNT(*) FROM restaurants").Scan(&count)

@@ -6,7 +6,7 @@
 	import { 
 		LayoutDashboard, ShoppingCart, Utensils, QrCode, 
 		Users, ChefHat, LogOut, Store, ExternalLink, Menu as MenuIcon, X,
-		CreditCard, Monitor, ClipboardList
+		CreditCard, Monitor, ClipboardList, ShieldCheck
 	} from '@lucide/svelte';
 
 	let { children } = $props();
@@ -20,7 +20,8 @@
 		{ href: '/admin/tables', label: 'Meja & QR Code', icon: QrCode },
 		{ href: '/admin/registers', label: 'Mesin Kasir', icon: Monitor, roles: ['OWNER', 'ADMIN'] },
 		{ href: '/admin/shifts', label: 'Laporan Shift', icon: ClipboardList, roles: ['OWNER', 'ADMIN'] },
-		{ href: '/admin/users', label: 'Kelola Karyawan', icon: Users, roles: ['OWNER', 'ADMIN'] }
+		{ href: '/admin/users', label: 'Kelola Karyawan', icon: Users, roles: ['OWNER', 'ADMIN'] },
+		{ href: '/superadmin', label: 'Superadmin HQ', icon: ShieldCheck, roles: ['SUPERADMIN', 'OWNER'] }
 	];
 
 	onMount(async () => {
