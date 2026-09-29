@@ -94,11 +94,11 @@
 			</p>
 		</div>
 
-		<div class="flex items-center gap-3">
+		<div class="flex flex-wrap items-center gap-2 sm:gap-3 w-full sm:w-auto">
 			<button
 				type="button"
 				onclick={loadRegisters}
-				class="p-2.5 bg-white hover:bg-slate-50 text-slate-700 rounded-xl border border-slate-200 shadow-xs transition-colors"
+				class="p-2.5 bg-white hover:bg-slate-50 text-slate-700 rounded-xl border border-slate-200 shadow-xs transition-colors shrink-0"
 			>
 				<RefreshCw class="w-4 h-4 {loading ? 'animate-spin' : ''}" />
 			</button>
@@ -106,7 +106,7 @@
 			<button
 				type="button"
 				onclick={openCreateModal}
-				class="px-4 py-2.5 bg-orange-600 hover:bg-orange-700 text-white rounded-xl shadow-md shadow-orange-600/20 transition-all font-bold text-xs flex items-center gap-2"
+				class="flex-1 sm:flex-initial justify-center px-4 py-2.5 bg-orange-600 hover:bg-orange-700 text-white rounded-xl shadow-md shadow-orange-600/20 transition-all font-bold text-xs flex items-center gap-2"
 			>
 				<Plus class="w-4 h-4" />
 				<span>Tambah Mesin Kasir</span>
@@ -121,7 +121,64 @@
 		{:else if registers.length === 0}
 			<div class="text-center py-20 text-slate-400 text-xs font-medium">Belum ada mesin kasir yang terdaftar.</div>
 		{:else}
-			<div class="overflow-x-auto">
+			<!-- Mobile Cards View -->
+			<div class="md:hidden divide-y divide-slate-100">
+				{#each registers as reg}
+					<div class="p-4 space-y-3">
+						<div class="flex items-start justify-between gap-2">
+							<div class="flex items-center gap-2.5">
+								<div class="w-8 h-8 rounded-lg bg-orange-50 text-orange-600 flex items-center justify-center shrink-0">
+									<Monitor class="w-4 h-4" />
+								</div>
+								<div>
+									<h3 class="font-bold text-sm text-slate-900">{reg.name}</h3>
+									<span class="font-mono text-[10px] text-slate-400">ID: {reg.id}</span>
+								</div>
+							</div>
+
+							{#if reg.status === 'ACTIVE'}
+								<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0">
+									<span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+									Aktif
+								</span>
+							{:else}
+								<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200 shrink-0">
+									<span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+									Nonaktif
+								</span>
+							{/if}
+						</div>
+
+						<div class="flex items-center justify-between text-xs pt-1 border-t border-slate-100">
+							<span class="text-[11px] text-slate-400 font-mono">
+								{new Date(reg.created_at).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}
+							</span>
+
+							<div class="flex items-center gap-2">
+								<button
+									type="button"
+									onclick={() => openEditModal(reg)}
+									class="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center gap-1 transition-colors"
+								>
+									<Edit2 class="w-3.5 h-3.5" />
+									<span>Edit</span>
+								</button>
+								<button
+									type="button"
+									onclick={() => handleDelete(reg.id)}
+									class="p-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 transition-colors"
+									title="Hapus Register"
+								>
+									<Trash2 class="w-3.5 h-3.5" />
+								</button>
+							</div>
+						</div>
+					</div>
+				{/each}
+			</div>
+
+			<!-- Desktop Table View -->
+			<div class="hidden md:block overflow-x-auto">
 				<table class="w-full text-left text-xs border-collapse">
 					<thead>
 						<tr class="bg-slate-50/80 border-b border-slate-200/80 text-slate-400 font-bold uppercase tracking-wider text-[11px]">
@@ -187,7 +244,7 @@
 	<!-- Modal Form -->
 	{#if showModal}
 		<div class="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-			<div class="bg-white rounded-3xl p-6 sm:p-8 w-full max-w-md space-y-6 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+			<div class="bg-white rounded-3xl p-5 sm:p-8 w-full max-w-md space-y-6 shadow-2xl animate-in fade-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
 				<div class="flex items-center justify-between border-b border-slate-100 pb-4">
 					<h3 class="text-lg font-black text-slate-900 font-['Outfit']">
 						{editingRegister ? 'Ubah Mesin Kasir' : 'Tambah Mesin Kasir'}

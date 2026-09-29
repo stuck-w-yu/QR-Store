@@ -127,7 +127,7 @@
 
 <div class="h-full flex flex-col space-y-6">
 	<!-- Kitchen Subheader Controls -->
-	<div class="flex items-center justify-between">
+	<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
 		<div class="flex items-center gap-3">
 			<span class="text-xs font-bold text-slate-400">Total Tiket Aktif:</span>
 			<span class="px-3 py-1 bg-orange-500/20 text-orange-400 font-extrabold rounded-lg text-sm border border-orange-500/30">
@@ -135,11 +135,11 @@
 			</span>
 		</div>
 
-		<div class="flex items-center gap-3">
+		<div class="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
 			<button
 				type="button"
 				onclick={() => (soundEnabled = !soundEnabled)}
-				class="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold border transition-colors {soundEnabled
+				class="flex-1 sm:flex-initial justify-center flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold border transition-colors {soundEnabled
 					? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-400'
 					: 'bg-slate-800 border-slate-700 text-slate-400'}"
 			>
@@ -155,7 +155,7 @@
 			<button
 				type="button"
 				onclick={loadOrders}
-				class="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl border border-slate-700 transition-colors"
+				class="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl border border-slate-700 transition-colors shrink-0"
 			>
 				<RefreshCw class="w-4 h-4" />
 			</button>
@@ -163,7 +163,7 @@
 	</div>
 
 	<!-- 3-Column Kanban Board -->
-	<div class="grid grid-cols-1 md:grid-cols-3 gap-6 flex-1 items-start">
+	<div class="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 flex-1 items-start">
 		<!-- Column 1: Pesanan Baru (CONFIRMED) -->
 		<div class="bg-slate-900/60 rounded-3xl p-4 border border-slate-800 flex flex-col space-y-4">
 			<div class="flex items-center justify-between pb-3 border-b border-slate-800">

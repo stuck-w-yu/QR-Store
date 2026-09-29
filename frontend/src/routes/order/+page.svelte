@@ -317,7 +317,7 @@
 												<div class="flex items-center gap-2.5">
 													<div class="w-4 h-4 rounded-{mod.type === 'SINGLE' ? 'full' : 'md'} border flex items-center justify-center {isOptionSelected(opt.id) ? 'border-orange-600 bg-orange-600 text-white' : 'border-slate-300'}">
 														{#if isOptionSelected(opt.id)}
-															<Check class="w-3 h-3 stroke-[3]" />
+															<Check class="w-3 h-3 stroke-3" />
 														{/if}
 													</div>
 													<span>{opt.name}</span>

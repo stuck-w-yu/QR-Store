@@ -67,7 +67,7 @@
 		<button
 			type="button"
 			onclick={() => (showCreateModal = true)}
-			class="bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-md shadow-orange-600/30 flex items-center gap-1.5 transition-colors"
+			class="w-full sm:w-auto justify-center bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-md shadow-orange-600/30 flex items-center gap-1.5 transition-colors"
 		>
 			<Plus class="w-4 h-4" />
 			<span>+ Tambah Karyawan</span>
@@ -77,7 +77,7 @@
 	<!-- Modal -->
 	{#if showCreateModal}
 		<div class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-			<div class="bg-white rounded-3xl p-6 w-full max-w-md space-y-4 shadow-xl">
+			<div class="bg-white rounded-3xl p-5 sm:p-6 w-full max-w-md space-y-4 shadow-xl max-h-[90vh] overflow-y-auto">
 				<h3 class="font-bold text-base text-slate-900">Tambah Akun Karyawan</h3>
 				<form onsubmit={handleCreateUser} class="space-y-3.5 text-xs">
 					<div>
@@ -160,19 +160,19 @@
 		{:else}
 			<div class="divide-y divide-slate-100">
 				{#each users as u}
-					<div class="p-4 sm:px-6 flex items-center justify-between gap-4 hover:bg-slate-50/60 transition-colors">
-						<div class="flex items-center gap-3.5">
-							<div class="w-10 h-10 rounded-xl bg-orange-50 text-orange-600 flex items-center justify-center font-bold text-sm">
+					<div class="p-4 sm:px-6 flex items-center justify-between gap-3 sm:gap-4 hover:bg-slate-50/60 transition-colors">
+						<div class="flex items-center gap-3 sm:gap-3.5 min-w-0 flex-1">
+							<div class="w-10 h-10 rounded-xl bg-orange-50 text-orange-600 flex items-center justify-center font-bold text-sm shrink-0">
 								{u.name.charAt(0)}
 							</div>
-							<div>
-								<h3 class="font-bold text-sm text-slate-900">{u.name}</h3>
-								<span class="text-xs text-slate-400 font-mono">{u.email}</span>
+							<div class="min-w-0 flex-1">
+								<h3 class="font-bold text-sm text-slate-900 truncate">{u.name}</h3>
+								<span class="text-xs text-slate-400 font-mono truncate block">{u.email}</span>
 							</div>
 						</div>
 
-						<div class="flex items-center gap-4">
-							<span class="px-3 py-1 rounded-full text-[10px] font-bold tracking-wider uppercase bg-slate-100 text-slate-700">
+						<div class="flex items-center gap-2 sm:gap-4 shrink-0">
+							<span class="px-2.5 sm:px-3 py-1 rounded-full text-[10px] font-bold tracking-wider uppercase bg-slate-100 text-slate-700">
 								{u.role}
 							</span>
 

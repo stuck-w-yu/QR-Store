@@ -133,14 +133,14 @@
 			</p>
 		</div>
 
-		<div class="flex items-center gap-3">
+		<div class="flex flex-wrap items-center gap-2 sm:gap-3 w-full sm:w-auto">
 			<button
 				type="button"
 				onclick={loadDashboard}
-				class="p-2.5 bg-white hover:bg-slate-50 text-slate-700 rounded-xl border border-slate-200 shadow-xs transition-colors flex items-center gap-2 text-xs font-bold"
+				class="p-2.5 bg-white hover:bg-slate-50 text-slate-700 rounded-xl border border-slate-200 shadow-xs transition-colors flex items-center justify-center gap-2 text-xs font-bold"
 			>
 				<RefreshCw class="w-4 h-4 {loading ? 'animate-spin' : ''}" />
-				<span class="hidden sm:inline">Segarkan</span>
+				<span class="inline">Segarkan</span>
 			</button>
 
 			{#if shiftStore.currentShift}
@@ -150,7 +150,7 @@
 						actualAmount = shiftStore.summary?.expected_amount || 0;
 						showCloseModal = true;
 					}}
-					class="px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl shadow-md shadow-red-600/20 transition-all font-bold text-xs flex items-center gap-2"
+					class="flex-1 sm:flex-initial justify-center px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl shadow-md shadow-red-600/20 transition-all font-bold text-xs flex items-center gap-2"
 				>
 					<Lock class="w-4 h-4" />
 					<span>Tutup Kasir</span>
@@ -159,7 +159,7 @@
 				<button
 					type="button"
 					onclick={() => (showOpenModal = true)}
-					class="px-4 py-2.5 bg-orange-600 hover:bg-orange-700 text-white rounded-xl shadow-md shadow-orange-600/20 transition-all font-bold text-xs flex items-center gap-2"
+					class="flex-1 sm:flex-initial justify-center px-4 py-2.5 bg-orange-600 hover:bg-orange-700 text-white rounded-xl shadow-md shadow-orange-600/20 transition-all font-bold text-xs flex items-center gap-2"
 				>
 					<Store class="w-4 h-4" />
 					<span>Buka Kasir Sekarang</span>
@@ -232,16 +232,16 @@
 					</div>
 				</div>
 
-				<div class="bg-slate-800/80 backdrop-blur-xs border border-slate-700/80 rounded-2xl p-4 md:p-5 flex items-center gap-6">
+				<div class="bg-slate-800/80 backdrop-blur-xs border border-slate-700/80 rounded-2xl p-4 md:p-5 grid grid-cols-2 gap-4 md:gap-6 sm:flex sm:items-center">
 					<div>
 						<span class="text-[11px] font-bold text-slate-400 block uppercase tracking-wider">Net Penjualan</span>
-						<span class="text-2xl md:text-3xl font-black text-orange-400 font-['Outfit']">
+						<span class="text-xl sm:text-2xl md:text-3xl font-black text-orange-400 font-['Outfit']">
 							{formatRupiah(shiftStore.summary?.net_sales || 0)}
 						</span>
 					</div>
-					<div class="border-l border-slate-700 pl-6">
+					<div class="border-l border-slate-700 pl-4 sm:pl-6">
 						<span class="text-[11px] font-bold text-slate-400 block uppercase tracking-wider">Total Pesanan</span>
-						<span class="text-2xl font-black text-white font-['Outfit']">
+						<span class="text-xl sm:text-2xl md:text-3xl font-black text-white font-['Outfit']">
 							{shiftStore.summary?.orders_count || 0}
 						</span>
 					</div>
@@ -377,23 +377,23 @@
 			{:else}
 				<div class="divide-y divide-slate-100">
 					{#each transactions as t}
-						<div class="p-4 flex items-center justify-between hover:bg-slate-50/50 transition-colors text-xs">
-							<div class="flex items-center gap-3">
+						<div class="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-4 hover:bg-slate-50/50 transition-colors text-xs">
+							<div class="flex items-start sm:items-center gap-3 min-w-0">
 								{#if t.type === 'SALE'}
-									<div class="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold text-[10px]">
+									<div class="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5 sm:mt-0">
 										SALE
 									</div>
 								{:else if t.type === 'REFUND'}
-									<div class="w-8 h-8 rounded-xl bg-red-50 text-red-600 flex items-center justify-center font-bold text-[10px]">
+									<div class="w-8 h-8 rounded-xl bg-red-50 text-red-600 flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5 sm:mt-0">
 										RFND
 									</div>
 								{:else}
-									<div class="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold text-[10px]">
+									<div class="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5 sm:mt-0">
 										VOID
 									</div>
 								{/if}
 
-								<div>
+								<div class="min-w-0 flex-1">
 									<div class="font-bold text-slate-900 flex items-center gap-2">
 										<span>{t.type}</span>
 										{#if t.order_id}
@@ -412,8 +412,8 @@
 								</div>
 							</div>
 
-							<div class="text-right">
-								<span class="font-black font-['Outfit'] {t.type === 'SALE' ? 'text-emerald-600' : 'text-red-600'}">
+							<div class="sm:text-right pl-11 sm:pl-0">
+								<span class="font-black text-sm sm:text-xs font-['Outfit'] {t.type === 'SALE' ? 'text-emerald-600' : 'text-red-600'}">
 									{t.type === 'SALE' ? '+' : '-'}{formatRupiah(t.amount)}
 								</span>
 							</div>
@@ -427,7 +427,7 @@
 	<!-- Modal: Buka Shift -->
 	{#if showOpenModal}
 		<div class="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-			<div class="bg-white rounded-3xl p-6 sm:p-8 w-full max-w-md space-y-6 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+			<div class="bg-white rounded-3xl p-5 sm:p-8 w-full max-w-md space-y-6 shadow-2xl animate-in fade-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
 				<div class="flex items-center justify-between border-b border-slate-100 pb-4">
 					<div>
 						<h3 class="text-lg font-black text-slate-900 font-['Outfit']">Buka Shift Kasir</h3>
@@ -504,7 +504,7 @@
 	<!-- Modal: Tutup Shift -->
 	{#if showCloseModal && shiftStore.currentShift}
 		<div class="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-			<div class="bg-white rounded-3xl p-6 sm:p-8 w-full max-w-lg space-y-6 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+			<div class="bg-white rounded-3xl p-5 sm:p-8 w-full max-w-lg space-y-6 shadow-2xl animate-in fade-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
 				<div class="flex items-center justify-between border-b border-slate-100 pb-4">
 					<div>
 						<h3 class="text-lg font-black text-slate-900 font-['Outfit']">Tutup Shift Kasir (Closing)</h3>

@@ -7,30 +7,30 @@
 
 <div class="min-h-screen bg-slate-900 text-white selection:bg-orange-500 font-['Plus_Jakarta_Sans',sans-serif] relative overflow-hidden">
 	<!-- Ambient Background Glows -->
-	<div class="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[500px] bg-linear-to-b from-orange-600/20 to-transparent blur-3xl pointer-events-none"></div>
+	<div class="absolute top-0 left-1/2 -translate-x-1/2 w-200 h-125 bg-linear-to-b from-orange-600/20 to-transparent blur-3xl pointer-events-none"></div>
 
 	<!-- Navigation Bar -->
-	<header class="max-w-6xl mx-auto p-6 flex items-center justify-between relative z-10">
-		<div class="flex items-center gap-3">
-			<div class="w-11 h-11 rounded-2xl bg-linear-to-tr from-orange-600 to-amber-500 flex items-center justify-center shadow-lg shadow-orange-500/30">
-				<Store class="w-6 h-6 text-white" />
+	<header class="max-w-6xl mx-auto p-4 sm:p-6 flex items-center justify-between relative z-10 gap-2">
+		<div class="flex items-center gap-2.5 sm:gap-3">
+			<div class="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-linear-to-tr from-orange-600 to-amber-500 flex items-center justify-center shadow-lg shadow-orange-500/30 shrink-0">
+				<Store class="w-5 h-5 sm:w-6 sm:h-6 text-white" />
 			</div>
 			<div>
-				<span class="text-lg font-black tracking-tight font-['Outfit'] block">QR-Store</span>
-				<span class="text-[10px] text-orange-400 font-bold uppercase tracking-wider block -mt-1">Self-Order System</span>
+				<span class="text-base sm:text-lg font-black tracking-tight font-['Outfit'] block">QR-Store</span>
+				<span class="text-[9px] sm:text-[10px] text-orange-400 font-bold uppercase tracking-wider block -mt-1">Self-Order System</span>
 			</div>
 		</div>
 
-		<div class="flex items-center gap-3">
+		<div class="flex items-center gap-2 sm:gap-3 shrink-0">
 			<a
 				href="/login"
-				class="text-xs font-bold text-slate-300 hover:text-white px-4 py-2 rounded-xl transition-colors"
+				class="text-xs font-bold text-slate-300 hover:text-white px-2.5 sm:px-4 py-2 rounded-xl transition-colors"
 			>
 				Staff Login
 			</a>
 			<a
 				href="/order?token=demo-qr-token-table-01"
-				class="text-xs font-bold bg-orange-600 hover:bg-orange-500 text-white px-5 py-2.5 rounded-xl shadow-lg shadow-orange-600/30 transition-all active:scale-95"
+				class="text-xs font-bold bg-orange-600 hover:bg-orange-500 text-white px-3.5 sm:px-5 py-2.5 rounded-xl shadow-lg shadow-orange-600/30 transition-all active:scale-95"
 			>
 				Mulai Demo
 			</a>
@@ -38,13 +38,13 @@
 	</header>
 
 	<!-- Hero Section -->
-	<main class="max-w-5xl mx-auto px-6 pt-12 pb-24 relative z-10 text-center space-y-8">
-		<div class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/10 border border-white/15 backdrop-blur-md text-xs font-semibold text-orange-300">
-			<Zap class="w-3.5 h-3.5 text-amber-400" />
-			<span>Platform Pemesanan Meja Mandiri & Kasir Cashless</span>
+	<main class="max-w-5xl mx-auto px-4 sm:px-6 pt-8 sm:pt-12 pb-20 sm:pb-24 relative z-10 text-center space-y-6 sm:space-y-8">
+		<div class="inline-flex items-center gap-2 px-3.5 sm:px-4 py-1.5 rounded-full bg-white/10 border border-white/15 backdrop-blur-md text-xs font-semibold text-orange-300">
+			<Zap class="w-3.5 h-3.5 text-amber-400 shrink-0" />
+			<span class="text-[11px] sm:text-xs">Platform Pemesanan Meja Mandiri & Kasir Cashless</span>
 		</div>
 
-		<h1 class="text-4xl sm:text-6xl font-black font-['Outfit'] tracking-tight max-w-3xl mx-auto leading-[1.15]">
+		<h1 class="text-3xl sm:text-5xl md:text-6xl font-black font-['Outfit'] tracking-tight max-w-3xl mx-auto leading-[1.15]">
 			Solusi Digitalisasi Restoran <br class="hidden sm:inline" />
 			<span class="bg-linear-to-r from-orange-400 via-amber-300 to-yellow-400 bg-clip-text text-transparent">
 				Cepat, Praktis, & Real-time

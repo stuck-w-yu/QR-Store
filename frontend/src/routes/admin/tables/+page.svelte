@@ -93,18 +93,18 @@
 		</div>
 
 		<!-- Add Table Form -->
-		<form onsubmit={handleCreateTable} class="flex items-center gap-2">
+		<form onsubmit={handleCreateTable} class="flex items-center gap-2 w-full sm:w-auto">
 			<input
 				type="text"
 				bind:value={newTableName}
 				placeholder="Nama/Nomor Meja (cth: Meja 06)..."
 				required
-				class="text-xs px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white focus:outline-none focus:border-orange-500 w-60"
+				class="text-xs px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white focus:outline-none focus:border-orange-500 flex-1 sm:w-60"
 			/>
 			<button
 				type="submit"
 				disabled={creating}
-				class="bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-md shadow-orange-600/30 flex items-center gap-1.5 disabled:opacity-50 transition-all active:scale-95"
+				class="bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-md shadow-orange-600/30 flex items-center justify-center gap-1.5 disabled:opacity-50 transition-all active:scale-95 shrink-0"
 			>
 				<Plus class="w-4 h-4" />
 				<span>Tambah</span>

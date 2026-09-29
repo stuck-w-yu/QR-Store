@@ -45,7 +45,7 @@
 
 <div class="min-h-screen bg-slate-100 flex font-['Plus_Jakarta_Sans',sans-serif]">
 	<!-- Desktop Sidebar -->
-	<aside class="w-64 bg-slate-900 text-white flex flex-col shrink-0 hidden md:flex border-r border-slate-800">
+	<aside class="w-64 bg-slate-900 text-white hidden md:flex flex-col shrink-0 border-r border-slate-800">
 		<div class="p-6 border-b border-slate-800 flex items-center gap-3">
 			<div class="w-10 h-10 rounded-xl bg-orange-600 flex items-center justify-center shadow-lg shadow-orange-600/30">
 				<Store class="w-6 h-6 text-white" />
@@ -143,31 +143,68 @@
 
 		<!-- Mobile Navigation Dropdown -->
 		{#if sidebarOpen}
-			<div class="md:hidden bg-slate-900 border-b border-slate-800 p-4 space-y-2 text-xs font-semibold">
+			<div class="md:hidden bg-slate-900 border-b border-slate-800 p-4 space-y-2 text-xs font-semibold animate-in fade-in slide-in-from-top-2 duration-150">
 				{#each navItems as item}
-					<a
-						href={item.href}
-						onclick={() => (sidebarOpen = false)}
-						class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl {page.url.pathname === item.href
-							? 'bg-orange-600 text-white font-bold'
-							: 'text-slate-400'}"
-					>
-						<item.icon class="w-4 h-4" />
-						<span>{item.label}</span>
-					</a>
+					{#if !item.roles || (auth.user && item.roles.includes(auth.user.role))}
+						<a
+							href={item.href}
+							onclick={() => (sidebarOpen = false)}
+							class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl {page.url.pathname === item.href
+								? 'bg-orange-600 text-white font-bold'
+								: 'text-slate-400 hover:text-white hover:bg-slate-800/60'}"
+						>
+							<item.icon class="w-4 h-4" />
+							<span>{item.label}</span>
+						</a>
+					{/if}
 				{/each}
-				<button
-					type="button"
-					onclick={handleLogout}
-					class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-red-400 text-left"
-				>
-					<LogOut class="w-4 h-4" />
-					<span>Keluar</span>
-				</button>
+
+				<div class="pt-3 mt-3 border-t border-slate-800 space-y-1">
+					<a
+						href="/kitchen/display"
+						target="_blank"
+						onclick={() => (sidebarOpen = false)}
+						class="flex items-center justify-between px-3.5 py-2.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800/60"
+					>
+						<div class="flex items-center gap-3">
+							<ChefHat class="w-4 h-4 text-amber-400" />
+							<span>Kitchen Board</span>
+						</div>
+						<ExternalLink class="w-3.5 h-3.5 text-slate-500" />
+					</a>
+
+					<a
+						href="/order?token=demo-qr-token-table-01"
+						target="_blank"
+						onclick={() => (sidebarOpen = false)}
+						class="flex items-center justify-between px-3.5 py-2.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800/60"
+					>
+						<div class="flex items-center gap-3">
+							<QrCode class="w-4 h-4 text-emerald-400" />
+							<span>Simulasi Pelanggan</span>
+						</div>
+						<ExternalLink class="w-3.5 h-3.5 text-slate-500" />
+					</a>
+				</div>
+
+				<div class="pt-3 mt-3 border-t border-slate-800 flex items-center justify-between px-1">
+					<div class="truncate mr-3">
+						<div class="text-xs font-bold text-slate-200 truncate">{auth.user?.name || 'Staff User'}</div>
+						<div class="text-[10px] text-slate-500 truncate">{auth.user?.email || ''}</div>
+					</div>
+					<button
+						type="button"
+						onclick={handleLogout}
+						class="flex items-center gap-2 px-3 py-2 rounded-xl text-red-400 hover:bg-red-500/10 font-bold shrink-0"
+					>
+						<LogOut class="w-4 h-4" />
+						<span>Keluar</span>
+					</button>
+				</div>
 			</div>
 		{/if}
 
-		<main class="flex-1 p-6 md:p-8 overflow-y-auto">
+		<main class="flex-1 p-4 sm:p-6 md:p-8 overflow-y-auto">
 			{@render children()}
 		</main>
 	</div>

@@ -118,11 +118,11 @@
 			</p>
 		</div>
 
-		<div class="flex items-center gap-2">
+		<div class="flex flex-wrap items-center gap-2 w-full sm:w-auto">
 			<button
 				type="button"
 				onclick={() => (showAddCategory = true)}
-				class="bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs px-3.5 py-2.5 rounded-xl border border-slate-200 shadow-xs flex items-center gap-1.5 transition-colors"
+				class="flex-1 sm:flex-initial justify-center bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs px-3.5 py-2.5 rounded-xl border border-slate-200 shadow-xs flex items-center gap-1.5 transition-colors"
 			>
 				<FolderPlus class="w-4 h-4 text-slate-500" />
 				<span>+ Kategori</span>
@@ -131,7 +131,7 @@
 			<button
 				type="button"
 				onclick={() => (showAddMenu = true)}
-				class="bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-md shadow-orange-600/30 flex items-center gap-1.5 transition-colors"
+				class="flex-1 sm:flex-initial justify-center bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-md shadow-orange-600/30 flex items-center gap-1.5 transition-colors"
 			>
 				<Plus class="w-4 h-4" />
 				<span>+ Tambah Menu</span>
@@ -142,7 +142,7 @@
 	<!-- Add Category Modal -->
 	{#if showAddCategory}
 		<div class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-			<div class="bg-white rounded-3xl p-6 w-full max-w-sm space-y-4 shadow-xl">
+			<div class="bg-white rounded-3xl p-5 sm:p-6 w-full max-w-sm space-y-4 shadow-xl max-h-[90vh] overflow-y-auto">
 				<h3 class="font-bold text-base text-slate-900">Tambah Kategori Baru</h3>
 				<form onsubmit={handleAddCategory} class="space-y-3">
 					<input
@@ -270,8 +270,8 @@
 
 			<div class="divide-y divide-slate-100">
 				{#each menus as m}
-					<div class="p-4 sm:px-6 flex items-center justify-between gap-4 hover:bg-slate-50/60 transition-colors">
-						<div class="flex items-center gap-4">
+					<div class="p-4 sm:px-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 hover:bg-slate-50/60 transition-colors">
+						<div class="flex items-start sm:items-center gap-3.5 sm:gap-4 min-w-0">
 							{#if m.image_url}
 								<img
 									src={m.image_url}
@@ -284,8 +284,8 @@
 								</div>
 							{/if}
 
-							<div>
-								<div class="flex items-center gap-2">
+							<div class="min-w-0 flex-1">
+								<div class="flex flex-wrap items-center gap-2">
 									<h3 class="font-bold text-sm text-slate-900">{m.name}</h3>
 									{#if m.category_name}
 										<span class="text-[10px] font-semibold px-2 py-0.5 bg-slate-100 text-slate-600 rounded-md">
@@ -297,14 +297,14 @@
 									{formatRupiah(m.price)}
 								</div>
 								{#if m.description}
-									<p class="text-[11px] text-slate-500 line-clamp-1 max-w-md mt-0.5">
+									<p class="text-[11px] text-slate-500 line-clamp-2 sm:line-clamp-1 max-w-md mt-0.5">
 										{m.description}
 									</p>
 								{/if}
 							</div>
 						</div>
 
-						<div class="flex items-center gap-3">
+						<div class="flex items-center justify-between sm:justify-end gap-3 w-full sm:w-auto pt-2.5 sm:pt-0 border-t border-slate-100 sm:border-0">
 							<!-- Availability Toggle -->
 							<button
 								type="button"
