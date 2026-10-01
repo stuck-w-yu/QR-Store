@@ -5,7 +5,7 @@
 	import type { Order } from '$lib/types';
 	import { 
 		Flame, Check, BellRing, Clock, AlertTriangle, 
-		UtensilsCrossed, RefreshCw, Volume2, VolumeX 
+		UtensilsCrossed, RefreshCw, Volume2, VolumeX, CheckCircle2 
 	} from '@lucide/svelte';
 
 	let orders = $state<Order[]>([]);
@@ -41,7 +41,11 @@
 	async function loadOrders() {
 		try {
 			const data = await api.get<Order[]>('/kitchen/orders');
-			orders = data;
+			// Preserve completed orders if backend query has not yet refreshed
+			const existingCompleted = orders.filter((o) => o.status === 'COMPLETED');
+			const returnedIds = new Set(data.map((o) => o.id));
+			const missingCompleted = existingCompleted.filter((o) => !returnedIds.has(o.id));
+			orders = [...data, ...missingCompleted];
 		} catch (e) {
 			console.error('Failed to load kitchen orders', e);
 		} finally {
@@ -92,8 +96,16 @@
 	}
 
 	async function handleComplete(orderId: string) {
-		await api.post(`/kitchen/orders/${orderId}/complete`);
-		await loadOrders();
+		try {
+			await api.post(`/kitchen/orders/${orderId}/complete`);
+			// Optimistically update order status to COMPLETED
+			orders = orders.map((o) =>
+				o.id === orderId ? { ...o, status: 'COMPLETED', updated_at: new Date().toISOString() } : o
+			);
+			await loadOrders();
+		} catch (e) {
+			console.error('Failed to complete order', e);
+		}
 	}
 
 	function getElapsedMinutes(createdAt: string): number {
@@ -105,6 +117,8 @@
 	let confirmedOrders = $derived(orders.filter((o) => o.status === 'CONFIRMED'));
 	let preparingOrders = $derived(orders.filter((o) => o.status === 'PREPARING'));
 	let readyOrders = $derived(orders.filter((o) => o.status === 'READY'));
+	let completedOrders = $derived(orders.filter((o) => o.status === 'COMPLETED'));
+	let activeOrdersCount = $derived(confirmedOrders.length + preparingOrders.length + readyOrders.length);
 
 	onMount(async () => {
 		// Auto demo login if not authenticated
@@ -128,11 +142,19 @@
 <div class="h-full flex flex-col space-y-6">
 	<!-- Kitchen Subheader Controls -->
 	<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-		<div class="flex items-center gap-3">
-			<span class="text-xs font-bold text-slate-400">Total Tiket Aktif:</span>
-			<span class="px-3 py-1 bg-orange-500/20 text-orange-400 font-extrabold rounded-lg text-sm border border-orange-500/30">
-				{orders.length} Pesanan
-			</span>
+		<div class="flex flex-wrap items-center gap-2.5">
+			<div class="flex items-center gap-2">
+				<span class="text-xs font-bold text-slate-400">Total Tiket Aktif:</span>
+				<span class="px-3 py-1 bg-orange-500/20 text-orange-400 font-extrabold rounded-lg text-sm border border-orange-500/30">
+					{activeOrdersCount} Pesanan
+				</span>
+			</div>
+			{#if completedOrders.length > 0}
+				<div class="flex items-center gap-1.5 px-3 py-1 bg-emerald-500/15 text-emerald-400 font-bold rounded-lg text-xs border border-emerald-500/25">
+					<CheckCircle2 class="w-3.5 h-3.5" />
+					<span>{completedOrders.length} Selesai Diantar</span>
+				</div>
+			{/if}
 		</div>
 
 		<div class="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
@@ -162,8 +184,8 @@
 		</div>
 	</div>
 
-	<!-- 3-Column Kanban Board -->
-	<div class="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 flex-1 items-start">
+	<!-- 4-Column Kanban Board -->
+	<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 sm:gap-6 flex-1 items-start">
 		<!-- Column 1: Pesanan Baru (CONFIRMED) -->
 		<div class="bg-slate-900/60 rounded-3xl p-4 border border-slate-800 flex flex-col space-y-4">
 			<div class="flex items-center justify-between pb-3 border-b border-slate-800">
@@ -301,7 +323,7 @@
 		<div class="bg-slate-900/60 rounded-3xl p-4 border border-slate-800 flex flex-col space-y-4">
 			<div class="flex items-center justify-between pb-3 border-b border-slate-800">
 				<div class="flex items-center gap-2">
-					<div class="w-3 h-3 rounded-full bg-emerald-500"></div>
+					<div class="w-3 h-3 rounded-full bg-emerald-500 animate-pulse"></div>
 					<h2 class="font-extrabold text-sm text-slate-200 uppercase tracking-wider">Siap Disajikan</h2>
 				</div>
 				<span class="px-2 py-0.5 bg-emerald-500/20 text-emerald-400 font-bold text-xs rounded-full">
@@ -317,7 +339,7 @@
 								<span class="text-xs font-mono font-bold text-emerald-400 block">{ticket.order_number}</span>
 								<h3 class="font-extrabold text-base text-white">{ticket.table_name || 'Meja'}</h3>
 							</div>
-							<span class="px-2.5 py-0.5 bg-emerald-500/20 text-emerald-400 text-[10px] font-bold rounded-full uppercase">
+							<span class="px-2.5 py-0.5 bg-emerald-500/20 text-emerald-400 text-[10px] font-bold rounded-full uppercase border border-emerald-500/30">
 								Siap Antar
 							</span>
 						</div>
@@ -333,14 +355,69 @@
 						<button
 							type="button"
 							onclick={() => handleComplete(ticket.id)}
-							class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold py-3 rounded-xl shadow-md text-xs flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
+							class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold py-2.5 px-3 rounded-xl shadow-md text-xs flex flex-col items-center justify-center gap-0.5 transition-all active:scale-[0.98]"
 						>
-							<Check class="w-4 h-4" />
-							<span>Selesaikan Pesanan</span>
+							<div class="flex items-center gap-1.5 font-black">
+								<Check class="w-4 h-4 stroke-3" />
+								<span>Pesanan Selesai (Sudah Diantar)</span>
+							</div>
+							<span class="text-[10px] text-emerald-100 font-medium opacity-90">
+								Klik saat pesanan telah diantar ke meja
+							</span>
 						</button>
 					</div>
 				{:else}
 					<div class="text-center py-16 text-slate-600 text-xs">Tidak ada hidangan menunggu diantar</div>
+				{/each}
+			</div>
+		</div>
+
+		<!-- Column 4: Pesanan Selesai / Sudah Diantar (COMPLETED) -->
+		<div class="bg-slate-900/60 rounded-3xl p-4 border border-slate-800 flex flex-col space-y-4">
+			<div class="flex items-center justify-between pb-3 border-b border-slate-800">
+				<div class="flex items-center gap-2">
+					<div class="w-3 h-3 rounded-full bg-emerald-400"></div>
+					<h2 class="font-extrabold text-sm text-slate-200 uppercase tracking-wider">Selesai (Diantar)</h2>
+				</div>
+				<span class="px-2 py-0.5 bg-slate-700/60 text-slate-300 font-bold text-xs rounded-full">
+					{completedOrders.length}
+				</span>
+			</div>
+
+			<div class="space-y-4 overflow-y-auto max-h-[75vh] pr-1">
+				{#each completedOrders as ticket (ticket.id)}
+					<div class="bg-slate-800/60 rounded-2xl p-4 border border-slate-700/60 opacity-90 space-y-3">
+						<div class="flex items-start justify-between">
+							<div>
+								<span class="text-xs font-mono font-bold text-slate-400 block">{ticket.order_number}</span>
+								<h3 class="font-extrabold text-base text-slate-200">{ticket.table_name || 'Meja'}</h3>
+							</div>
+							<span class="px-2.5 py-0.5 bg-emerald-500/20 text-emerald-300 text-[10px] font-bold rounded-full uppercase flex items-center gap-1 border border-emerald-500/30">
+								<Check class="w-3 h-3" />
+								Sudah Diantar
+							</span>
+						</div>
+
+						<div class="divide-y divide-slate-700/40 text-xs text-slate-400">
+							{#each ticket.items || [] as it}
+								<div class="py-1.5 flex justify-between">
+									<span>{it.quantity}x {it.menu_name_snapshot}</span>
+								</div>
+							{/each}
+						</div>
+
+						<div class="pt-2 border-t border-slate-700/50 flex items-center justify-between text-[11px] text-slate-400">
+							<span class="flex items-center gap-1 text-emerald-400 font-semibold">
+								<CheckCircle2 class="w-3.5 h-3.5" />
+								Pesanan Selesai
+							</span>
+							<span class="font-mono text-[10px] text-slate-500">
+								{new Date(ticket.updated_at || ticket.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+							</span>
+						</div>
+					</div>
+				{:else}
+					<div class="text-center py-16 text-slate-600 text-xs">Belum ada pesanan yang diantar</div>
 				{/each}
 			</div>
 		</div>

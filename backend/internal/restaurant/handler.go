@@ -24,8 +24,8 @@ func (h *Handler) RegisterRoutes(r *gin.RouterGroup) {
 		resto.PATCH("/:id", auth.RequireRoles(auth.RoleOwner, auth.RoleAdmin), h.Update)
 	}
 
-	// Superadmin endpoints: accessible by SUPERADMIN and OWNER (for development/testing)
-	super := r.Group("/superadmin", auth.AuthMiddleware(h.authService), auth.RequireRoles(auth.RoleSuperadmin, auth.RoleOwner))
+	// Superadmin endpoints: accessible only by SUPERADMIN (IT)
+	super := r.Group("/superadmin", auth.AuthMiddleware(h.authService), auth.RequireRoles(auth.RoleSuperadmin))
 	{
 		super.GET("/stats", h.GetPlatformStats)
 		super.GET("/restaurants", h.ListTenants)

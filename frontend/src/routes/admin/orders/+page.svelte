@@ -5,7 +5,7 @@
 	import { 
 		ShoppingCart, RefreshCw, Eye, XCircle, 
 		Clock, CheckCircle, AlertCircle, Filter,
-		RotateCcw, Ban
+		RotateCcw, Ban, Wallet
 	} from '@lucide/svelte';
 
 	let orders = $state<Order[]>([]);
@@ -23,6 +23,25 @@
 	let voidModalOrder = $state<Order | null>(null);
 	let voidReason = $state('');
 	let voidSubmitting = $state(false);
+
+	async function handleAcceptCash(o: Order) {
+		if (!confirm(`Konfirmasi terima pembayaran TUNAI sebesar ${formatRupiah(o.total)} untuk ${o.order_number}?`)) {
+			return;
+		}
+		try {
+			await api.post('/payments/simulate-pay', {
+				order_id: o.id,
+				payment_method: 'CASH'
+			});
+			await loadOrders();
+			if (selectedOrder?.id === o.id) {
+				selectedOrder = null;
+			}
+			alert(`Pembayaran tunai pesanan ${o.order_number} berhasil diterima! Pesanan diteruskan ke dapur.`);
+		} catch (e: any) {
+			alert(e?.message || 'Gagal memproses pembayaran kasir');
+		}
+	}
 
 	async function loadOrders() {
 		try {
@@ -121,7 +140,7 @@
 			case 'READY':
 				return { bg: 'bg-emerald-50 text-emerald-700 border-emerald-200', label: 'Siap Saji' };
 			case 'COMPLETED':
-				return { bg: 'bg-slate-100 text-slate-700 border-slate-200', label: 'Selesai' };
+				return { bg: 'bg-slate-100 text-slate-700 border-slate-200', label: 'Selesai (Diantar)' };
 			case 'CANCELLED':
 				return { bg: 'bg-red-50 text-red-700 border-red-200', label: 'Dibatalkan' };
 			default:
@@ -156,7 +175,7 @@
 				<option value="CONFIRMED">Diterima</option>
 				<option value="PREPARING">Sedang Dimasak</option>
 				<option value="READY">Siap Saji</option>
-				<option value="COMPLETED">Selesai</option>
+				<option value="COMPLETED">Selesai (Sudah Diantar)</option>
 				<option value="CANCELLED">Dibatalkan</option>
 			</select>
 
@@ -206,6 +225,18 @@
 						</div>
 
 						<div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+							{#if o.status === 'WAITING_PAYMENT'}
+								<button
+									type="button"
+									onclick={() => handleAcceptCash(o)}
+									class="py-1.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-colors shadow-xs"
+									title="Terima Pembayaran Tunai Kasir"
+								>
+									<Wallet class="w-3.5 h-3.5" />
+									<span>Terima Tunai</span>
+								</button>
+							{/if}
+
 							<button
 								type="button"
 								onclick={() => (selectedOrder = o)}
@@ -270,6 +301,18 @@
 									{new Date(o.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
 								</td>
 								<td class="p-4 pr-6 text-right space-x-1.5">
+									{#if o.status === 'WAITING_PAYMENT'}
+										<button
+											type="button"
+											onclick={() => handleAcceptCash(o)}
+											class="p-1.5 px-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] inline-flex items-center gap-1 transition-colors shadow-xs"
+											title="Terima Pembayaran Tunai Kasir"
+										>
+											<Wallet class="w-3 h-3" />
+											<span>Terima Kasir</span>
+										</button>
+									{/if}
+
 									<button
 										type="button"
 										onclick={() => (selectedOrder = o)}
@@ -355,6 +398,19 @@
 						<span class="text-orange-600 font-extrabold font-['Outfit']">{formatRupiah(selectedOrder.total)}</span>
 					</div>
 				</div>
+
+				{#if selectedOrder.status === 'WAITING_PAYMENT'}
+					<div class="pt-2 border-t border-slate-100">
+						<button
+							type="button"
+							onclick={() => selectedOrder && handleAcceptCash(selectedOrder)}
+							class="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-sm transition-all active:scale-[0.98]"
+						>
+							<Wallet class="w-4 h-4" />
+							<span>Terima Pembayaran Tunai (Kasir)</span>
+						</button>
+					</div>
+				{/if}
 			</div>
 		</div>
 	{/if}

@@ -21,7 +21,7 @@
 		{ href: '/admin/registers', label: 'Mesin Kasir', icon: Monitor, roles: ['OWNER', 'ADMIN'] },
 		{ href: '/admin/shifts', label: 'Laporan Shift', icon: ClipboardList, roles: ['OWNER', 'ADMIN'] },
 		{ href: '/admin/users', label: 'Kelola Karyawan', icon: Users, roles: ['OWNER', 'ADMIN'] },
-		{ href: '/superadmin', label: 'Superadmin HQ', icon: ShieldCheck, roles: ['SUPERADMIN', 'OWNER'] }
+		{ href: '/superadmin', label: 'Superadmin HQ', icon: ShieldCheck, roles: ['SUPERADMIN'] }
 	];
 
 	onMount(async () => {

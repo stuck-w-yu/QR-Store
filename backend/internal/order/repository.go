@@ -186,7 +186,9 @@ func (r *repository) ListKitchenOrders(ctx context.Context, restaurantID string)
 		       o.notes, o.created_at, o.updated_at
 		FROM orders o
 		LEFT JOIN tables t ON t.id = o.table_id
-		WHERE o.restaurant_id = $1 AND o.status IN ('CONFIRMED', 'PREPARING', 'READY')
+		WHERE o.restaurant_id = $1 
+		  AND (o.status IN ('CONFIRMED', 'PREPARING', 'READY') 
+		       OR (o.status = 'COMPLETED' AND o.updated_at >= NOW() - INTERVAL '12 hours'))
 		ORDER BY o.created_at ASC
 	`
 	rows, err := r.pool.Query(ctx, query, restaurantID)

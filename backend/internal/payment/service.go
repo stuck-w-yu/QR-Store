@@ -29,7 +29,7 @@ type Service interface {
 	GetPaymentByID(ctx context.Context, id string) (*Payment, error)
 	GetPaymentByOrderID(ctx context.Context, orderID string) (*Payment, error)
 	ProcessWebhook(ctx context.Context, headers http.Header, rawBody []byte) (*WebhookResult, error)
-	SimulatePay(ctx context.Context, orderID string) (*Payment, error)
+	SimulatePay(ctx context.Context, orderID string, paymentMethod string) (*Payment, error)
 	SetSaleHook(hook SaleHook)
 }
 
@@ -202,7 +202,7 @@ func (s *service) ProcessWebhook(ctx context.Context, headers http.Header, rawBo
 	return result, nil
 }
 
-func (s *service) SimulatePay(ctx context.Context, orderID string) (*Payment, error) {
+func (s *service) SimulatePay(ctx context.Context, orderID string, paymentMethod string) (*Payment, error) {
 	o, err := s.orderRepo.GetByID(ctx, orderID)
 	if err != nil {
 		return nil, err
@@ -218,6 +218,11 @@ func (s *service) SimulatePay(ctx context.Context, orderID string) (*Payment, er
 		return nil, err
 	}
 
+	method := paymentMethod
+	if method == "" {
+		method = "QRIS"
+	}
+
 	// Build simulated mock webhook payload
 	mockPayload := MockWebhookPayload{
 		EventID:       "sim_" + uuid.New().String()[:8],
@@ -225,7 +230,7 @@ func (s *service) SimulatePay(ctx context.Context, orderID string) (*Payment, er
 		TransactionID: "tx_" + uuid.New().String()[:8],
 		Amount:        o.Total,
 		Status:        "PAID",
-		PaymentMethod: "QRIS",
+		PaymentMethod: method,
 		Signature:     "valid",
 	}
 	body, _ := json.Marshal(mockPayload)

@@ -20,6 +20,7 @@ func NewHandler(service Service) *Handler {
 func (h *Handler) RegisterRoutes(r *gin.RouterGroup) {
 	// Public payment endpoints
 	r.POST("/orders/:id/payment", h.CreatePayment)
+	r.GET("/orders/:id/payment", h.GetPaymentByOrderID)
 	r.GET("/payments/:id", h.GetPayment)
 	r.POST("/payments/webhook", h.HandleWebhook)
 	r.POST("/payments/simulate-pay", h.SimulatePay)
@@ -53,6 +54,21 @@ func (h *Handler) GetPayment(c *gin.Context) {
 	response.OK(c, p, "Payment details retrieved")
 }
 
+func (h *Handler) GetPaymentByOrderID(c *gin.Context) {
+	orderID := c.Param("id")
+	p, err := h.service.GetPaymentByOrderID(c.Request.Context(), orderID)
+	if err != nil {
+		if errors.Is(err, ErrPaymentNotFound) {
+			response.NotFound(c, "PAYMENT_NOT_FOUND", "Payment record not found for this order")
+			return
+		}
+		response.InternalServerError(c, "DB_ERROR", err.Error())
+		return
+	}
+	response.OK(c, p, "Payment details retrieved")
+}
+
+
 func (h *Handler) HandleWebhook(c *gin.Context) {
 	body, err := io.ReadAll(c.Request.Body)
 	if err != nil {
@@ -77,7 +93,8 @@ func (h *Handler) HandleWebhook(c *gin.Context) {
 }
 
 type SimulatePayRequest struct {
-	OrderID string `json:"order_id" binding:"required"`
+	OrderID       string `json:"order_id" binding:"required"`
+	PaymentMethod string `json:"payment_method"`
 }
 
 func (h *Handler) SimulatePay(c *gin.Context) {
@@ -87,7 +104,7 @@ func (h *Handler) SimulatePay(c *gin.Context) {
 		return
 	}
 
-	p, err := h.service.SimulatePay(c.Request.Context(), req.OrderID)
+	p, err := h.service.SimulatePay(c.Request.Context(), req.OrderID, req.PaymentMethod)
 	if err != nil {
 		if errors.Is(err, ErrOrderAlreadyPaid) {
 			response.Conflict(c, "ORDER_ALREADY_PAID", "Order is already paid")

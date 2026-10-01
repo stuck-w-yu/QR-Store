@@ -22,8 +22,8 @@
 				goto('/login');
 				return;
 			}
-			// Allow SUPERADMIN and OWNER (for convenience in dev/testing)
-			if (auth.user && auth.user.role !== 'SUPERADMIN' && auth.user.role !== 'OWNER') {
+			// Allow only SUPERADMIN (IT)
+			if (auth.user && auth.user.role !== 'SUPERADMIN') {
 				goto('/admin/dashboard');
 			}
 		}
