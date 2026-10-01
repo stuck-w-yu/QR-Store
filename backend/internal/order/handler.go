@@ -25,6 +25,7 @@ func (h *Handler) RegisterRoutes(r *gin.RouterGroup) {
 	// Public customer routes
 	r.POST("/public/orders", h.CreatePublicOrder)
 	r.GET("/public/orders/:id", h.GetPublicOrder)
+	r.GET("/public/orders/:id/status", h.GetPublicOrderStatus)
 
 	// Staff routes
 	orderGroup := r.Group("/orders", auth.AuthMiddleware(h.authService))
@@ -73,6 +74,29 @@ func (h *Handler) GetPublicOrder(c *gin.Context) {
 		return
 	}
 	response.OK(c, order, "Order retrieved successfully")
+}
+
+func (h *Handler) GetPublicOrderStatus(c *gin.Context) {
+	id := c.Param("id")
+	order, err := h.service.GetOrderByID(c.Request.Context(), id)
+	if err != nil {
+		if errors.Is(err, ErrOrderNotFound) {
+			response.NotFound(c, "ORDER_NOT_FOUND", "Order not found")
+			return
+		}
+		response.InternalServerError(c, "DB_ERROR", err.Error())
+		return
+	}
+	response.OK(c, gin.H{
+		"order_id":       order.ID,
+		"order_number":   order.OrderNumber,
+		"status":         order.Status,
+		"payment_status": order.PaymentStatus,
+		"payment_method": order.PaymentMethod,
+		"updated_at":     order.UpdatedAt,
+		"completed_at":   order.CompletedAt,
+		"cancelled_at":   order.CancelledAt,
+	}, "Order status retrieved successfully")
 }
 
 func (h *Handler) ListOrders(c *gin.Context) {

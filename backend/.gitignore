@@ -5,6 +5,7 @@
 
 # Go
 bin/
+server
 *.exe
 *.exe~
 *.dll

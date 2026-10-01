@@ -5,23 +5,48 @@ import "time"
 type Status string
 
 const (
-	StatusWaitingPayment Status = "WAITING_PAYMENT"
-	StatusConfirmed      Status = "CONFIRMED"
-	StatusPreparing      Status = "PREPARING"
-	StatusReady          Status = "READY"
-	StatusCompleted      Status = "COMPLETED"
-	StatusCancelled      Status = "CANCELLED"
+	StatusDraft               Status = "DRAFT"
+	StatusPendingConfirmation Status = "PENDING_CONFIRMATION"
+	StatusWaitingPayment      Status = "WAITING_PAYMENT"
+	StatusConfirmed           Status = "CONFIRMED"
+	StatusPreparing           Status = "PREPARING"
+	StatusReady               Status = "READY"
+	StatusServed              Status = "SERVED"
+	StatusCompleted           Status = "COMPLETED"
+	StatusCancelled           Status = "CANCELLED"
+)
+
+type PaymentStatus string
+
+const (
+	PaymentStatusUnpaid         PaymentStatus = "UNPAID"
+	PaymentStatusPaymentPending PaymentStatus = "PAYMENT_PENDING"
+	PaymentStatusPending        PaymentStatus = "PENDING"
+	PaymentStatusPaid           PaymentStatus = "PAID"
+	PaymentStatusFailed         PaymentStatus = "FAILED"
+	PaymentStatusRefunded       PaymentStatus = "REFUNDED"
+)
+
+const (
+	PaymentMethodCash        = "CASH"
+	PaymentMethodQRISManual  = "QRIS_MANUAL"
+	PaymentMethodDebit       = "DEBIT"
+	PaymentMethodOther       = "OTHER"
 )
 
 func IsValidTransition(from, to Status) bool {
 	switch from {
-	case StatusWaitingPayment:
+	case StatusDraft:
+		return to == StatusPendingConfirmation || to == StatusWaitingPayment || to == StatusCancelled
+	case StatusPendingConfirmation, StatusWaitingPayment:
 		return to == StatusConfirmed || to == StatusCancelled
 	case StatusConfirmed:
 		return to == StatusPreparing || to == StatusCancelled
 	case StatusPreparing:
 		return to == StatusReady || to == StatusCancelled
 	case StatusReady:
+		return to == StatusServed || to == StatusCompleted || to == StatusCancelled
+	case StatusServed:
 		return to == StatusCompleted || to == StatusCancelled
 	case StatusCompleted, StatusCancelled:
 		return false // terminal states
@@ -31,22 +56,26 @@ func IsValidTransition(from, to Status) bool {
 }
 
 type Order struct {
-	ID             string      `json:"id"`
-	RestaurantID   string      `json:"restaurant_id"`
-	TableID        string      `json:"table_id"`
-	TableName      string      `json:"table_name,omitempty"`
-	TableSessionID *string     `json:"table_session_id,omitempty"`
-	OrderNumber    string      `json:"order_number"`
-	Status         Status      `json:"status"`
-	Subtotal       int64       `json:"subtotal"`
-	Tax            int64       `json:"tax"`
-	ServiceCharge  int64       `json:"service_charge"`
-	Discount       int64       `json:"discount"`
-	Total          int64       `json:"total"`
-	Notes          *string     `json:"notes"`
-	Items          []OrderItem `json:"items,omitempty"`
-	CreatedAt      time.Time   `json:"created_at"`
-	UpdatedAt      time.Time   `json:"updated_at"`
+	ID             string        `json:"id"`
+	RestaurantID   string        `json:"restaurant_id"`
+	TableID        string        `json:"table_id"`
+	TableName      string        `json:"table_name,omitempty"`
+	TableSessionID *string       `json:"table_session_id,omitempty"`
+	OrderNumber    string        `json:"order_number"`
+	Status         Status        `json:"status"`
+	PaymentStatus  PaymentStatus `json:"payment_status"`
+	PaymentMethod  *string       `json:"payment_method,omitempty"`
+	Subtotal       int64         `json:"subtotal"`
+	Tax            int64         `json:"tax"`
+	ServiceCharge  int64         `json:"service_charge"`
+	Discount       int64         `json:"discount"`
+	Total          int64         `json:"total"`
+	Notes          *string       `json:"notes"`
+	Items          []OrderItem   `json:"items,omitempty"`
+	CreatedAt      time.Time     `json:"created_at"`
+	UpdatedAt      time.Time     `json:"updated_at"`
+	CompletedAt    *time.Time    `json:"completed_at,omitempty"`
+	CancelledAt    *time.Time    `json:"cancelled_at,omitempty"`
 }
 
 type SelectedModifierOption struct {

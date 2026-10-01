@@ -165,6 +165,7 @@ func (s *service) CreatePublicOrder(ctx context.Context, req CreateOrderRequest)
 		TableName:     tableInfo.Table.Name,
 		OrderNumber:   orderNum,
 		Status:        StatusWaitingPayment,
+		PaymentStatus: PaymentStatusUnpaid,
 		Subtotal:      subtotal,
 		Tax:           tax,
 		ServiceCharge: serviceCharge,
@@ -182,6 +183,12 @@ func (s *service) CreatePublicOrder(ctx context.Context, req CreateOrderRequest)
 
 	if err := s.orderRepo.Create(ctx, order, orderItems); err != nil {
 		return nil, err
+	}
+
+	if s.hub != nil {
+		// Notify cashier room of incoming order
+		s.hub.Publish(fmt.Sprintf("restaurant:%s:cashier", restoID), "NEW_ORDER_PENDING", order)
+		s.hub.Publish(fmt.Sprintf("restaurant:%s:cashier", restoID), "order.created", order)
 	}
 
 	return order, nil
@@ -215,6 +222,13 @@ func (s *service) UpdateOrderStatus(ctx context.Context, id string, newStatus St
 
 		// Broadcast to kitchen room
 		s.hub.Publish(fmt.Sprintf("restaurant:%s:kitchen", o.RestaurantID), "ORDER_STATUS_CHANGED", map[string]interface{}{
+			"order_id": o.ID,
+			"status":   o.Status,
+			"order":    o,
+		})
+
+		// Broadcast to cashier room
+		s.hub.Publish(fmt.Sprintf("restaurant:%s:cashier", o.RestaurantID), "ORDER_STATUS_CHANGED", map[string]interface{}{
 			"order_id": o.ID,
 			"status":   o.Status,
 			"order":    o,

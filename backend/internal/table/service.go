@@ -3,6 +3,7 @@ package table
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -18,6 +19,12 @@ type UpdateTableRequest struct {
 	Status string `json:"status" binding:"required"`
 }
 
+type CreateServiceRequestInput struct {
+	QRToken string  `json:"qr_token" binding:"required"`
+	Type    string  `json:"type" binding:"required"` // CALL_WAITER, BILL, RECEIPT, HELP
+	Notes   *string `json:"notes"`
+}
+
 type Service interface {
 	CreateTable(ctx context.Context, restaurantID string, req CreateTableRequest) (*Table, error)
 	GetTable(ctx context.Context, id, restaurantID string) (*Table, error)
@@ -27,6 +34,7 @@ type Service interface {
 	RegenerateQRToken(ctx context.Context, id, restaurantID string) (string, error)
 	GenerateQRCodePNG(ctx context.Context, id, restaurantID, frontendBaseURL string) ([]byte, error)
 	DeleteTable(ctx context.Context, id, restaurantID string) error
+	CreateServiceRequest(ctx context.Context, req CreateServiceRequestInput) (*ServiceRequest, error)
 }
 
 type service struct {
@@ -101,4 +109,34 @@ func (s *service) GenerateQRCodePNG(ctx context.Context, id, restaurantID, front
 
 func (s *service) DeleteTable(ctx context.Context, id, restaurantID string) error {
 	return s.repo.Delete(ctx, id, restaurantID)
+}
+
+func (s *service) CreateServiceRequest(ctx context.Context, req CreateServiceRequestInput) (*ServiceRequest, error) {
+	tableInfo, err := s.repo.GetByQRToken(ctx, req.QRToken)
+	if err != nil {
+		return nil, ErrTableNotFound
+	}
+
+	reqType := strings.ToUpper(strings.TrimSpace(req.Type))
+	if reqType == "" {
+		reqType = "CALL_WAITER"
+	}
+
+	now := time.Now()
+	sr := &ServiceRequest{
+		ID:           "sr_" + uuid.New().String()[:8],
+		RestaurantID: tableInfo.Restaurant.ID,
+		TableID:      tableInfo.Table.ID,
+		TableName:    tableInfo.Table.Name,
+		Type:         reqType,
+		Status:       "PENDING",
+		Notes:        req.Notes,
+		CreatedAt:    now,
+	}
+
+	if err := s.repo.CreateServiceRequest(ctx, sr); err != nil {
+		return nil, err
+	}
+
+	return sr, nil
 }

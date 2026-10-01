@@ -40,6 +40,18 @@ type PublicTableInfo struct {
 	} `json:"table"`
 }
 
+type ServiceRequest struct {
+	ID           string     `json:"id"`
+	RestaurantID string     `json:"restaurant_id"`
+	TableID      string     `json:"table_id"`
+	TableName    string     `json:"table_name,omitempty"`
+	Type         string     `json:"type"`
+	Status       string     `json:"status"`
+	Notes        *string    `json:"notes,omitempty"`
+	CreatedAt    time.Time  `json:"created_at"`
+	ResolvedAt   *time.Time `json:"resolved_at,omitempty"`
+}
+
 type Repository interface {
 	Create(ctx context.Context, t *Table) error
 	GetByID(ctx context.Context, id, restaurantID string) (*Table, error)
@@ -48,6 +60,7 @@ type Repository interface {
 	Update(ctx context.Context, t *Table) error
 	UpdateQRToken(ctx context.Context, id, restaurantID, newToken string) error
 	Delete(ctx context.Context, id, restaurantID string) error
+	CreateServiceRequest(ctx context.Context, sr *ServiceRequest) error
 }
 
 type repository struct {
@@ -160,5 +173,14 @@ func (r *repository) UpdateQRToken(ctx context.Context, id, restaurantID, newTok
 func (r *repository) Delete(ctx context.Context, id, restaurantID string) error {
 	query := `DELETE FROM tables WHERE id = $1 AND restaurant_id = $2`
 	_, err := r.pool.Exec(ctx, query, id, restaurantID)
+	return err
+}
+
+func (r *repository) CreateServiceRequest(ctx context.Context, sr *ServiceRequest) error {
+	query := `
+		INSERT INTO service_requests (id, restaurant_id, table_id, type, status, notes, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+	`
+	_, err := r.pool.Exec(ctx, query, sr.ID, sr.RestaurantID, sr.TableID, sr.Type, sr.Status, sr.Notes, sr.CreatedAt)
 	return err
 }

@@ -20,9 +20,14 @@ type Payment struct {
 	ProviderTransactionID *string    `json:"provider_transaction_id"`
 	PaymentMethod         *string    `json:"payment_method"`
 	Amount                int64      `json:"amount"`
+	PaidAmount            int64      `json:"paid_amount"`
+	ChangeAmount          int64      `json:"change_amount"`
+	ReferenceNumber       *string    `json:"reference_number,omitempty"`
 	Status                Status     `json:"status"`
 	PaymentURL            *string    `json:"payment_url,omitempty"`
 	QRString              *string    `json:"qr_string,omitempty"`
+	VerifiedBy            *string    `json:"verified_by,omitempty"`
+	VerifiedAt            *time.Time `json:"verified_at,omitempty"`
 	ExpiredAt             *time.Time `json:"expired_at,omitempty"`
 	PaidAt                *time.Time `json:"paid_at,omitempty"`
 	CreatedAt             time.Time  `json:"created_at"`

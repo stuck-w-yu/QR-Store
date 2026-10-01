@@ -41,12 +41,17 @@ func (r *repository) Create(ctx context.Context, o *Order, items []OrderItem) er
 	}
 	defer tx.Rollback(ctx)
 
+	if o.PaymentStatus == "" {
+		o.PaymentStatus = PaymentStatusUnpaid
+	}
+
 	orderQuery := `
-		INSERT INTO orders (id, restaurant_id, table_id, table_session_id, order_number, status, subtotal, tax, service_charge, discount, total, notes, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+		INSERT INTO orders (id, restaurant_id, table_id, table_session_id, order_number, status, payment_status, payment_method, subtotal, tax, service_charge, discount, total, notes, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
 	`
 	_, err = tx.Exec(ctx, orderQuery,
 		o.ID, o.RestaurantID, o.TableID, o.TableSessionID, o.OrderNumber, o.Status,
+		o.PaymentStatus, o.PaymentMethod,
 		o.Subtotal, o.Tax, o.ServiceCharge, o.Discount, o.Total, o.Notes, o.CreatedAt, o.UpdatedAt,
 	)
 	if err != nil {
@@ -83,8 +88,9 @@ func (r *repository) Create(ctx context.Context, o *Order, items []OrderItem) er
 func (r *repository) GetByID(ctx context.Context, id string) (*Order, error) {
 	query := `
 		SELECT o.id, o.restaurant_id, o.table_id, t.name as table_name, o.table_session_id,
-		       o.order_number, o.status, o.subtotal, o.tax, o.service_charge, o.discount, o.total,
-		       o.notes, o.created_at, o.updated_at
+		       o.order_number, o.status, COALESCE(o.payment_status, 'UNPAID'), o.payment_method,
+		       o.subtotal, o.tax, o.service_charge, o.discount, o.total,
+		       o.notes, o.created_at, o.updated_at, o.completed_at, o.cancelled_at
 		FROM orders o
 		LEFT JOIN tables t ON t.id = o.table_id
 		WHERE o.id = $1
@@ -92,8 +98,9 @@ func (r *repository) GetByID(ctx context.Context, id string) (*Order, error) {
 	var o Order
 	err := r.pool.QueryRow(ctx, query, id).Scan(
 		&o.ID, &o.RestaurantID, &o.TableID, &o.TableName, &o.TableSessionID,
-		&o.OrderNumber, &o.Status, &o.Subtotal, &o.Tax, &o.ServiceCharge, &o.Discount, &o.Total,
-		&o.Notes, &o.CreatedAt, &o.UpdatedAt,
+		&o.OrderNumber, &o.Status, &o.PaymentStatus, &o.PaymentMethod,
+		&o.Subtotal, &o.Tax, &o.ServiceCharge, &o.Discount, &o.Total,
+		&o.Notes, &o.CreatedAt, &o.UpdatedAt, &o.CompletedAt, &o.CancelledAt,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -112,8 +119,9 @@ func (r *repository) GetByID(ctx context.Context, id string) (*Order, error) {
 func (r *repository) GetByOrderNumber(ctx context.Context, orderNum string) (*Order, error) {
 	query := `
 		SELECT o.id, o.restaurant_id, o.table_id, t.name as table_name, o.table_session_id,
-		       o.order_number, o.status, o.subtotal, o.tax, o.service_charge, o.discount, o.total,
-		       o.notes, o.created_at, o.updated_at
+		       o.order_number, o.status, COALESCE(o.payment_status, 'UNPAID'), o.payment_method,
+		       o.subtotal, o.tax, o.service_charge, o.discount, o.total,
+		       o.notes, o.created_at, o.updated_at, o.completed_at, o.cancelled_at
 		FROM orders o
 		LEFT JOIN tables t ON t.id = o.table_id
 		WHERE o.order_number = $1
@@ -121,8 +129,9 @@ func (r *repository) GetByOrderNumber(ctx context.Context, orderNum string) (*Or
 	var o Order
 	err := r.pool.QueryRow(ctx, query, orderNum).Scan(
 		&o.ID, &o.RestaurantID, &o.TableID, &o.TableName, &o.TableSessionID,
-		&o.OrderNumber, &o.Status, &o.Subtotal, &o.Tax, &o.ServiceCharge, &o.Discount, &o.Total,
-		&o.Notes, &o.CreatedAt, &o.UpdatedAt,
+		&o.OrderNumber, &o.Status, &o.PaymentStatus, &o.PaymentMethod,
+		&o.Subtotal, &o.Tax, &o.ServiceCharge, &o.Discount, &o.Total,
+		&o.Notes, &o.CreatedAt, &o.UpdatedAt, &o.CompletedAt, &o.CancelledAt,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -141,8 +150,9 @@ func (r *repository) GetByOrderNumber(ctx context.Context, orderNum string) (*Or
 func (r *repository) List(ctx context.Context, restaurantID string, status *Status) ([]Order, error) {
 	query := `
 		SELECT o.id, o.restaurant_id, o.table_id, t.name as table_name, o.table_session_id,
-		       o.order_number, o.status, o.subtotal, o.tax, o.service_charge, o.discount, o.total,
-		       o.notes, o.created_at, o.updated_at
+		       o.order_number, o.status, COALESCE(o.payment_status, 'UNPAID'), o.payment_method,
+		       o.subtotal, o.tax, o.service_charge, o.discount, o.total,
+		       o.notes, o.created_at, o.updated_at, o.completed_at, o.cancelled_at
 		FROM orders o
 		LEFT JOIN tables t ON t.id = o.table_id
 		WHERE o.restaurant_id = $1 AND ($2::varchar IS NULL OR o.status = $2)
@@ -160,8 +170,9 @@ func (r *repository) List(ctx context.Context, restaurantID string, status *Stat
 		var o Order
 		if err := rows.Scan(
 			&o.ID, &o.RestaurantID, &o.TableID, &o.TableName, &o.TableSessionID,
-			&o.OrderNumber, &o.Status, &o.Subtotal, &o.Tax, &o.ServiceCharge, &o.Discount, &o.Total,
-			&o.Notes, &o.CreatedAt, &o.UpdatedAt,
+			&o.OrderNumber, &o.Status, &o.PaymentStatus, &o.PaymentMethod,
+			&o.Subtotal, &o.Tax, &o.ServiceCharge, &o.Discount, &o.Total,
+			&o.Notes, &o.CreatedAt, &o.UpdatedAt, &o.CompletedAt, &o.CancelledAt,
 		); err != nil {
 			return nil, err
 		}
@@ -182,12 +193,13 @@ func (r *repository) List(ctx context.Context, restaurantID string, status *Stat
 func (r *repository) ListKitchenOrders(ctx context.Context, restaurantID string) ([]Order, error) {
 	query := `
 		SELECT o.id, o.restaurant_id, o.table_id, t.name as table_name, o.table_session_id,
-		       o.order_number, o.status, o.subtotal, o.tax, o.service_charge, o.discount, o.total,
-		       o.notes, o.created_at, o.updated_at
+		       o.order_number, o.status, COALESCE(o.payment_status, 'UNPAID'), o.payment_method,
+		       o.subtotal, o.tax, o.service_charge, o.discount, o.total,
+		       o.notes, o.created_at, o.updated_at, o.completed_at, o.cancelled_at
 		FROM orders o
 		LEFT JOIN tables t ON t.id = o.table_id
 		WHERE o.restaurant_id = $1 
-		  AND (o.status IN ('CONFIRMED', 'PREPARING', 'READY') 
+		  AND (o.status IN ('CONFIRMED', 'PREPARING', 'READY', 'SERVED') 
 		       OR (o.status = 'COMPLETED' AND o.updated_at >= NOW() - INTERVAL '12 hours'))
 		ORDER BY o.created_at ASC
 	`
@@ -202,8 +214,9 @@ func (r *repository) ListKitchenOrders(ctx context.Context, restaurantID string)
 		var o Order
 		if err := rows.Scan(
 			&o.ID, &o.RestaurantID, &o.TableID, &o.TableName, &o.TableSessionID,
-			&o.OrderNumber, &o.Status, &o.Subtotal, &o.Tax, &o.ServiceCharge, &o.Discount, &o.Total,
-			&o.Notes, &o.CreatedAt, &o.UpdatedAt,
+			&o.OrderNumber, &o.Status, &o.PaymentStatus, &o.PaymentMethod,
+			&o.Subtotal, &o.Tax, &o.ServiceCharge, &o.Discount, &o.Total,
+			&o.Notes, &o.CreatedAt, &o.UpdatedAt, &o.CompletedAt, &o.CancelledAt,
 		); err != nil {
 			return nil, err
 		}
@@ -271,7 +284,14 @@ func (r *repository) UpdateStatus(ctx context.Context, id string, newStatus Stat
 	}
 
 	now := time.Now()
-	_, err = tx.Exec(ctx, `UPDATE orders SET status = $1, updated_at = $2 WHERE id = $3`, newStatus, now, id)
+	_, err = tx.Exec(ctx, `
+		UPDATE orders
+		SET status = $1,
+		    updated_at = $2,
+		    completed_at = CASE WHEN $1 = 'COMPLETED' THEN $2 ELSE completed_at END,
+		    cancelled_at = CASE WHEN $1 = 'CANCELLED' THEN $2 ELSE cancelled_at END
+		WHERE id = $3
+	`, newStatus, now, id)
 	if err != nil {
 		return err
 	}
@@ -292,9 +312,9 @@ func (r *repository) UpdateStatus(ctx context.Context, id string, newStatus Stat
 func (r *repository) GetTodayStats(ctx context.Context, restaurantID string) (revenue int64, orderCount int, avgOrder int64, paidCount int, cancelledCount int, err error) {
 	query := `
 		SELECT 
-			COALESCE(SUM(CASE WHEN status != 'CANCELLED' AND status != 'WAITING_PAYMENT' THEN total ELSE 0 END), 0) as revenue,
+			COALESCE(SUM(CASE WHEN status != 'CANCELLED' AND status != 'WAITING_PAYMENT' AND status != 'PENDING_CONFIRMATION' AND status != 'DRAFT' THEN total ELSE 0 END), 0) as revenue,
 			COUNT(id) as total_orders,
-			COUNT(CASE WHEN status != 'CANCELLED' AND status != 'WAITING_PAYMENT' THEN 1 END) as paid_orders,
+			COUNT(CASE WHEN status != 'CANCELLED' AND status != 'WAITING_PAYMENT' AND status != 'PENDING_CONFIRMATION' AND status != 'DRAFT' THEN 1 END) as paid_orders,
 			COUNT(CASE WHEN status = 'CANCELLED' THEN 1 END) as cancelled_orders
 		FROM orders
 		WHERE restaurant_id = $1 AND created_at >= CURRENT_DATE

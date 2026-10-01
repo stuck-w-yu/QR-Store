@@ -19,8 +19,9 @@ func NewHandler(service Service, authService auth.Service) *Handler {
 }
 
 func (h *Handler) RegisterRoutes(r *gin.RouterGroup) {
-	// Public endpoint for customer scanning QR
+	// Public endpoint for customer scanning QR and waiter call (PRD Section 17 & 28)
 	r.GET("/public/tables/:qr_token", h.GetPublicTableInfo)
+	r.POST("/public/service-requests", h.CreateServiceRequest)
 
 	// Staff management endpoints
 	tables := r.Group("/tables", auth.AuthMiddleware(h.authService))
@@ -148,4 +149,24 @@ func (h *Handler) GetQRCodePNG(c *gin.Context) {
 	}
 
 	c.Data(http.StatusOK, "image/png", pngBytes)
+}
+
+func (h *Handler) CreateServiceRequest(c *gin.Context) {
+	var req CreateServiceRequestInput
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "INVALID_REQUEST", err.Error())
+		return
+	}
+
+	sr, err := h.service.CreateServiceRequest(c.Request.Context(), req)
+	if err != nil {
+		if errors.Is(err, ErrTableNotFound) {
+			response.NotFound(c, "TABLE_NOT_FOUND", "Table not found or inactive")
+			return
+		}
+		response.InternalServerError(c, "SERVICE_REQUEST_FAILED", err.Error())
+		return
+	}
+
+	response.Created(c, sr, "Service request submitted successfully")
 }

@@ -88,7 +88,7 @@ func main() {
 	orderHandler := order.NewHandler(orderService, authService)
 	paymentHandler := payment.NewHandler(paymentService)
 	kitchenHandler := kitchen.NewHandler(orderService, authService)
-	cashierHandler := cashier.NewHandler(cashierService, authService)
+	cashierHandler := cashier.NewHandler(cashierService, authService, orderService, paymentService)
 
 	// Router setup
 	r := gin.New()

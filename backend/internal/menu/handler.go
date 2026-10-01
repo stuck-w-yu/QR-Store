@@ -66,8 +66,10 @@ func NewHandler(repo Repository, authService auth.Service) *Handler {
 }
 
 func (h *Handler) RegisterRoutes(r *gin.RouterGroup) {
-	// Public Catalog
+	// Public Catalog (PRD Section 28 contract)
 	r.GET("/public/restaurants/:restaurant_id/menu", h.GetPublicMenu)
+	r.GET("/public/menu", h.GetPublicMenuQuery)
+	r.GET("/public/categories", h.GetPublicCategories)
 
 	// Admin / Owner Routes
 	catGroup := r.Group("/categories", auth.AuthMiddleware(h.authService))
@@ -99,6 +101,32 @@ func (h *Handler) GetPublicMenu(c *gin.Context) {
 		return
 	}
 	response.OK(c, catalog, "Menu catalog retrieved successfully")
+}
+
+func (h *Handler) GetPublicMenuQuery(c *gin.Context) {
+	restoID := c.Query("restaurant_id")
+	if restoID == "" {
+		restoID = "rst_nusantara"
+	}
+	catalog, err := h.repo.GetPublicCatalog(c.Request.Context(), restoID)
+	if err != nil {
+		response.InternalServerError(c, "DB_ERROR", err.Error())
+		return
+	}
+	response.OK(c, catalog, "Menu catalog retrieved successfully")
+}
+
+func (h *Handler) GetPublicCategories(c *gin.Context) {
+	restoID := c.Query("restaurant_id")
+	if restoID == "" {
+		restoID = "rst_nusantara"
+	}
+	cats, err := h.repo.ListCategories(c.Request.Context(), restoID)
+	if err != nil {
+		response.InternalServerError(c, "DB_ERROR", err.Error())
+		return
+	}
+	response.OK(c, cats, "Categories retrieved successfully")
 }
 
 // Categories

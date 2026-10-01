@@ -98,6 +98,8 @@ CREATE TABLE IF NOT EXISTS orders (
     table_session_id VARCHAR(64),
     order_number VARCHAR(100) UNIQUE NOT NULL,
     status VARCHAR(50) DEFAULT 'WAITING_PAYMENT' NOT NULL,
+    payment_status VARCHAR(50) DEFAULT 'UNPAID' NOT NULL,
+    payment_method VARCHAR(50),
     subtotal BIGINT NOT NULL,
     tax BIGINT NOT NULL,
     service_charge BIGINT NOT NULL,
@@ -105,7 +107,9 @@ CREATE TABLE IF NOT EXISTS orders (
     total BIGINT NOT NULL,
     notes TEXT,
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    completed_at TIMESTAMPTZ,
+    cancelled_at TIMESTAMPTZ
 );
 
 CREATE TABLE IF NOT EXISTS order_items (
@@ -129,13 +133,30 @@ CREATE TABLE IF NOT EXISTS payments (
     provider_transaction_id VARCHAR(255),
     payment_method VARCHAR(50),
     amount BIGINT NOT NULL,
+    paid_amount BIGINT DEFAULT 0 NOT NULL,
+    change_amount BIGINT DEFAULT 0 NOT NULL,
+    reference_number VARCHAR(100),
     status VARCHAR(50) DEFAULT 'PENDING' NOT NULL,
     payment_url TEXT,
     qr_string TEXT,
+    verified_by VARCHAR(64) REFERENCES users(id) ON DELETE SET NULL,
+    verified_at TIMESTAMPTZ,
     expired_at TIMESTAMPTZ,
     paid_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
     updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS service_requests (
+    id VARCHAR(64) PRIMARY KEY,
+    restaurant_id VARCHAR(64) REFERENCES restaurants(id) ON DELETE CASCADE NOT NULL,
+    table_id VARCHAR(64) REFERENCES tables(id) ON DELETE CASCADE NOT NULL,
+    type VARCHAR(50) NOT NULL, -- CALL_WAITER, BILL, RECEIPT, HELP
+    status VARCHAR(50) DEFAULT 'PENDING' NOT NULL, -- PENDING, IN_PROGRESS, RESOLVED, CANCELLED
+    notes TEXT,
+    resolved_by VARCHAR(64) REFERENCES users(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    resolved_at TIMESTAMPTZ
 );
 
 CREATE TABLE IF NOT EXISTS payment_webhook_events (

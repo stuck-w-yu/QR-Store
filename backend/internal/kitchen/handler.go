@@ -26,7 +26,9 @@ func (h *Handler) RegisterRoutes(r *gin.RouterGroup) {
 	{
 		kitch.GET("/orders", h.ListKitchenOrders)
 		kitch.POST("/orders/:id/accept", h.AcceptOrder)
+		kitch.POST("/orders/:id/start", h.AcceptOrder) // PRD Section 28 contract
 		kitch.POST("/orders/:id/ready", h.MarkReady)
+		kitch.POST("/orders/:id/serve", h.ServeOrder)
 		kitch.POST("/orders/:id/complete", h.CompleteOrder)
 	}
 }
@@ -71,13 +73,28 @@ func (h *Handler) MarkReady(c *gin.Context) {
 	response.OK(c, gin.H{"status": order.StatusReady}, "Order is ready for serving")
 }
 
+func (h *Handler) ServeOrder(c *gin.Context) {
+	id := c.Param("id")
+	userRole, _ := c.Get(auth.CtxRole)
+
+	if err := h.orderService.UpdateOrderStatus(c.Request.Context(), id, order.StatusServed, string(userRole.(auth.Role))); err != nil {
+		if errors.Is(err, order.ErrInvalidStatusOrder) {
+			response.Conflict(c, "INVALID_STATE", "Order is not in READY state")
+			return
+		}
+		response.InternalServerError(c, "UPDATE_FAILED", err.Error())
+		return
+	}
+	response.OK(c, gin.H{"status": order.StatusServed}, "Order marked as served")
+}
+
 func (h *Handler) CompleteOrder(c *gin.Context) {
 	id := c.Param("id")
 	userRole, _ := c.Get(auth.CtxRole)
 
 	if err := h.orderService.UpdateOrderStatus(c.Request.Context(), id, order.StatusCompleted, string(userRole.(auth.Role))); err != nil {
 		if errors.Is(err, order.ErrInvalidStatusOrder) {
-			response.Conflict(c, "INVALID_STATE", "Order is not in READY state")
+			response.Conflict(c, "INVALID_STATE", "Order is not in READY or SERVED state")
 			return
 		}
 		response.InternalServerError(c, "UPDATE_FAILED", err.Error())

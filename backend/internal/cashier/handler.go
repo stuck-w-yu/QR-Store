@@ -7,18 +7,24 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"qr-store/backend/internal/auth"
+	"qr-store/backend/internal/order"
+	"qr-store/backend/internal/payment"
 	"qr-store/backend/pkg/response"
 )
 
 type Handler struct {
-	service     Service
-	authService auth.Service
+	service        Service
+	authService    auth.Service
+	orderService   order.Service
+	paymentService payment.Service
 }
 
-func NewHandler(service Service, authService auth.Service) *Handler {
+func NewHandler(service Service, authService auth.Service, orderService order.Service, paymentService payment.Service) *Handler {
 	return &Handler{
-		service:     service,
-		authService: authService,
+		service:        service,
+		authService:    authService,
+		orderService:   orderService,
+		paymentService: paymentService,
 	}
 }
 
@@ -59,6 +65,17 @@ func (h *Handler) RegisterRoutes(r *gin.RouterGroup) {
 	{
 		reportGroup.GET("", auth.RequireRoles(auth.RoleOwner, auth.RoleAdmin), h.ListReports)
 		reportGroup.GET("/:id", auth.RequireRoles(auth.RoleOwner, auth.RoleAdmin), h.GetReportDetail)
+	}
+
+	// 5. Cashier Orders (PRD Section 28)
+	cashierOrders := r.Group("/cashier/orders", authMW)
+	{
+		cashierOrders.GET("", auth.RequireRoles(auth.RoleOwner, auth.RoleAdmin, auth.RoleCashier), h.ListOrders)
+		cashierOrders.GET("/:id", auth.RequireRoles(auth.RoleOwner, auth.RoleAdmin, auth.RoleCashier), h.GetOrder)
+		cashierOrders.POST("/:id/confirm", auth.RequireRoles(auth.RoleOwner, auth.RoleAdmin, auth.RoleCashier), h.ConfirmOrder)
+		cashierOrders.POST("/:id/payment", auth.RequireRoles(auth.RoleOwner, auth.RoleAdmin, auth.RoleCashier), h.ProcessPayment)
+		cashierOrders.POST("/:id/cancel", auth.RequireRoles(auth.RoleOwner, auth.RoleAdmin, auth.RoleCashier), h.CancelOrder)
+		cashierOrders.POST("/:id/void", auth.RequireRoles(auth.RoleOwner, auth.RoleAdmin, auth.RoleCashier), h.CreateVoid)
 	}
 }
 
@@ -360,4 +377,124 @@ func (h *Handler) GetReportDetail(c *gin.Context) {
 		return
 	}
 	response.OK(c, report, "Shift report detail retrieved successfully")
+}
+
+// ----------------- CASHIER ORDERS HANDLERS -----------------
+
+func (h *Handler) ListOrders(c *gin.Context) {
+	restoID, _ := c.Get(auth.CtxRestaurantID)
+	var status *order.Status
+	if s := c.Query("status"); s != "" {
+		st := order.Status(s)
+		status = &st
+	}
+
+	orders, err := h.orderService.ListOrders(c.Request.Context(), restoID.(string), status)
+	if err != nil {
+		response.InternalServerError(c, "DB_ERROR", err.Error())
+		return
+	}
+	response.OK(c, orders, "Orders retrieved successfully")
+}
+
+func (h *Handler) GetOrder(c *gin.Context) {
+	id := c.Param("id")
+	o, err := h.orderService.GetOrderByID(c.Request.Context(), id)
+	if err != nil {
+		if errors.Is(err, order.ErrOrderNotFound) {
+			response.NotFound(c, "ORDER_NOT_FOUND", "Order not found")
+			return
+		}
+		response.InternalServerError(c, "DB_ERROR", err.Error())
+		return
+	}
+	response.OK(c, o, "Order retrieved successfully")
+}
+
+func (h *Handler) ConfirmOrder(c *gin.Context) {
+	id := c.Param("id")
+	userID, _ := c.Get(auth.CtxUserID)
+
+	o, err := h.paymentService.ConfirmOrder(c.Request.Context(), id, userID.(string))
+	if err != nil {
+		if errors.Is(err, order.ErrOrderNotFound) {
+			response.NotFound(c, "ORDER_NOT_FOUND", "Order not found")
+			return
+		}
+		if errors.Is(err, order.ErrInvalidStatusOrder) {
+			response.Conflict(c, "INVALID_STATE", "Order cannot transition to confirmed state")
+			return
+		}
+		response.InternalServerError(c, "CONFIRM_FAILED", err.Error())
+		return
+	}
+	response.OK(c, o, "Order confirmed successfully")
+}
+
+type CashierPaymentRequest struct {
+	PaymentMethod   string  `json:"payment_method" binding:"required"`
+	PaidAmount      int64   `json:"paid_amount"`
+	ReferenceNumber *string `json:"reference_number"`
+}
+
+func (h *Handler) ProcessPayment(c *gin.Context) {
+	id := c.Param("id")
+	restoID, _ := c.Get(auth.CtxRestaurantID)
+	userID, _ := c.Get(auth.CtxUserID)
+
+	var req CashierPaymentRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "INVALID_REQUEST", err.Error())
+		return
+	}
+
+	res, err := h.paymentService.ProcessManualPayment(c.Request.Context(), payment.ProcessManualPaymentRequest{
+		OrderID:         id,
+		RestaurantID:    restoID.(string),
+		CashierID:       userID.(string),
+		PaymentMethod:   req.PaymentMethod,
+		PaidAmount:      req.PaidAmount,
+		ReferenceNumber: req.ReferenceNumber,
+	})
+	if err != nil {
+		if errors.Is(err, order.ErrOrderNotFound) {
+			response.NotFound(c, "ORDER_NOT_FOUND", "Order not found")
+			return
+		}
+		if errors.Is(err, payment.ErrOrderAlreadyPaid) {
+			response.Conflict(c, "ORDER_ALREADY_PAID", "Order is already paid")
+			return
+		}
+		if errors.Is(err, payment.ErrInsufficientPaidAmount) {
+			response.BadRequest(c, "INSUFFICIENT_PAYMENT", err.Error())
+			return
+		}
+		if errors.Is(err, payment.ErrInvalidPaymentMethod) {
+			response.BadRequest(c, "INVALID_PAYMENT_METHOD", err.Error())
+			return
+		}
+		if errors.Is(err, payment.ErrOrderCancelled) {
+			response.Conflict(c, "ORDER_CANCELLED", err.Error())
+			return
+		}
+		response.InternalServerError(c, "PAYMENT_FAILED", err.Error())
+		return
+	}
+
+	response.OK(c, res, "Payment processed successfully")
+}
+
+func (h *Handler) CancelOrder(c *gin.Context) {
+	id := c.Param("id")
+	userID, _ := c.Get(auth.CtxUserID)
+
+	if err := h.orderService.UpdateOrderStatus(c.Request.Context(), id, order.StatusCancelled, userID.(string)); err != nil {
+		if errors.Is(err, order.ErrInvalidStatusOrder) {
+			response.Conflict(c, "CANNOT_CANCEL", "Completed or already cancelled orders cannot be cancelled")
+			return
+		}
+		response.InternalServerError(c, "CANCEL_FAILED", err.Error())
+		return
+	}
+	response.OK(c, gin.H{"cancelled": true}, "Order cancelled successfully")
 }

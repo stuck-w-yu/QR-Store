@@ -21,6 +21,30 @@ func RunMigrationsAndSeed(ctx context.Context, db *DB) error {
 
 	// Ensure new schema columns exist
 	_, _ = db.Pool.Exec(ctx, "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS plan VARCHAR(50) DEFAULT 'PRO'")
+	_, _ = db.Pool.Exec(ctx, "ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_status VARCHAR(50) DEFAULT 'UNPAID' NOT NULL")
+	_, _ = db.Pool.Exec(ctx, "ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_method VARCHAR(50)")
+	_, _ = db.Pool.Exec(ctx, "ALTER TABLE orders ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ")
+	_, _ = db.Pool.Exec(ctx, "ALTER TABLE orders ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMPTZ")
+	_, _ = db.Pool.Exec(ctx, "ALTER TABLE payments ADD COLUMN IF NOT EXISTS paid_amount BIGINT DEFAULT 0 NOT NULL")
+	_, _ = db.Pool.Exec(ctx, "ALTER TABLE payments ADD COLUMN IF NOT EXISTS change_amount BIGINT DEFAULT 0 NOT NULL")
+	_, _ = db.Pool.Exec(ctx, "ALTER TABLE payments ADD COLUMN IF NOT EXISTS reference_number VARCHAR(100)")
+	_, _ = db.Pool.Exec(ctx, "ALTER TABLE payments ADD COLUMN IF NOT EXISTS verified_by VARCHAR(64) REFERENCES users(id) ON DELETE SET NULL")
+	_, _ = db.Pool.Exec(ctx, "ALTER TABLE payments ADD COLUMN IF NOT EXISTS verified_at TIMESTAMPTZ")
+	_, _ = db.Pool.Exec(ctx, `
+		CREATE TABLE IF NOT EXISTS service_requests (
+			id VARCHAR(64) PRIMARY KEY,
+			restaurant_id VARCHAR(64) REFERENCES restaurants(id) ON DELETE CASCADE NOT NULL,
+			table_id VARCHAR(64) REFERENCES tables(id) ON DELETE CASCADE NOT NULL,
+			type VARCHAR(50) NOT NULL,
+			status VARCHAR(50) DEFAULT 'PENDING' NOT NULL,
+			notes TEXT,
+			resolved_by VARCHAR(64) REFERENCES users(id) ON DELETE SET NULL,
+			created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+			resolved_at TIMESTAMPTZ
+		);
+		CREATE INDEX IF NOT EXISTS idx_service_requests_resto ON service_requests(restaurant_id);
+		CREATE INDEX IF NOT EXISTS idx_service_requests_status ON service_requests(status);
+	`)
 
 	// Ensure Superadmin user exists
 	var superadminCount int
