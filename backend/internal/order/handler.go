@@ -32,9 +32,9 @@ func (h *Handler) RegisterRoutes(r *gin.RouterGroup) {
 	{
 		orderGroup.GET("", h.ListOrders)
 		orderGroup.GET("/:id", h.GetOrder)
-		orderGroup.PATCH("/:id/status", auth.RequireRoles(auth.RoleOwner, auth.RoleAdmin, auth.RoleCashier), h.UpdateStatus)
-		orderGroup.POST("/:id/cancel", auth.RequireRoles(auth.RoleOwner, auth.RoleAdmin, auth.RoleCashier), h.CancelOrder)
-		orderGroup.GET("/analytics/today", auth.RequireRoles(auth.RoleOwner, auth.RoleAdmin, auth.RoleCashier), h.GetTodayAnalytics)
+		orderGroup.PATCH("/:id/status", auth.RequireRoles(auth.RoleSuperadmin, auth.RoleOwner, auth.RoleAdmin, auth.RoleCashier), h.UpdateStatus)
+		orderGroup.POST("/:id/cancel", auth.RequireRoles(auth.RoleSuperadmin, auth.RoleOwner, auth.RoleAdmin, auth.RoleCashier), h.CancelOrder)
+		orderGroup.GET("/analytics/today", auth.RequireRoles(auth.RoleSuperadmin, auth.RoleOwner, auth.RoleAdmin, auth.RoleCashier), h.GetTodayAnalytics)
 	}
 }
 

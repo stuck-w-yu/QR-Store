@@ -32,6 +32,9 @@ func (h *Handler) RegisterRoutes(r *gin.RouterGroup) {
 		super.POST("/restaurants", h.OnboardTenant)
 		super.PATCH("/restaurants/:id", h.UpdateTenant)
 		super.DELETE("/restaurants/:id", h.DeleteTenant)
+		super.GET("/orders", h.ListRecentOrders)
+		super.GET("/owners", h.ListOwners)
+		super.GET("/health", h.GetSystemHealth)
 	}
 
 	// Public restaurant detail by ID or slug
@@ -168,4 +171,31 @@ func (h *Handler) DeleteTenant(c *gin.Context) {
 		return
 	}
 	response.OK(c, nil, "Tenant deleted successfully")
+}
+
+func (h *Handler) ListRecentOrders(c *gin.Context) {
+	orders, err := h.repo.ListRecentOrders(c.Request.Context(), 50)
+	if err != nil {
+		response.InternalServerError(c, "DB_ERROR", err.Error())
+		return
+	}
+	response.OK(c, orders, "Recent platform orders retrieved successfully")
+}
+
+func (h *Handler) ListOwners(c *gin.Context) {
+	owners, err := h.repo.ListOwners(c.Request.Context())
+	if err != nil {
+		response.InternalServerError(c, "DB_ERROR", err.Error())
+		return
+	}
+	response.OK(c, owners, "Platform owners retrieved successfully")
+}
+
+func (h *Handler) GetSystemHealth(c *gin.Context) {
+	health, err := h.repo.GetSystemHealth(c.Request.Context())
+	if err != nil {
+		response.InternalServerError(c, "DB_ERROR", err.Error())
+		return
+	}
+	response.OK(c, health, "System diagnostics retrieved successfully")
 }

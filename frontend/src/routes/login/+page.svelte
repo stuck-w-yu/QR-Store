@@ -97,7 +97,7 @@
 		<!-- Quick Demo Role Switcher -->
 		<div class="pt-4 border-t border-slate-100">
 			<span class="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2.5 text-center">
-				Akun Demo Siap Pakai
+				Pilihan Akun Cepat
 			</span>
 
 			<button

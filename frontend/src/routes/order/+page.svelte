@@ -117,7 +117,7 @@
 				href="/order?token=demo-qr-token-table-01"
 				class="inline-block bg-orange-600 text-white font-semibold px-6 py-2.5 rounded-xl shadow-lg shadow-orange-500/30 text-sm"
 			>
-				Gunakan Demo Meja 01
+				Pilih Meja 01
 			</a>
 		</div>
 	{:else if tableInfo}

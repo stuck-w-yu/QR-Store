@@ -16,7 +16,6 @@
 	let error = $state<string | null>(null);
 	let order = $state<Order | null>(null);
 	let payment = $state<Payment | null>(null);
-	let paying = $state(false);
 	let showInvoiceModal = $state(false);
 	let invoiceAutoShown = $state(false);
 	let selectedMethod = $state<'QRIS' | 'CASH'>('QRIS');
@@ -151,24 +150,7 @@
 		}
 	}
 
-	async function handleSimulatePayment(method: string = selectedMethod) {
-		try {
-			paying = true;
-			const p = await api.post<Payment>('/payments/simulate-pay', { 
-				order_id: orderId,
-				payment_method: method
-			});
-			payment = p;
-			await loadOrder();
-			invoiceAutoShown = true;
-			showInvoiceModal = true;
-			confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
-		} catch (err: any) {
-			alert(err?.message || 'Gagal simulasi bayar');
-		} finally {
-			paying = false;
-		}
-	}
+
 
 	onMount(() => {
 		loadOrder();
@@ -288,23 +270,7 @@
 								Buka aplikasi e-wallet (GoPay, OVO, ShopeePay, DANA) atau mobile banking untuk memindai QRIS di atas.
 							</p>
 
-							<!-- Instant Mock Payment Trigger for Development / Testing -->
-							<div class="pt-2 border-t border-slate-100">
-								<button
-									type="button"
-									onclick={() => handleSimulatePayment('QRIS')}
-									disabled={paying}
-									class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl shadow-md text-xs flex items-center justify-center gap-2 disabled:opacity-50 transition-all active:scale-[0.98]"
-								>
-									{#if paying}
-										<div class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-										<span>Memverifikasi Pembayaran...</span>
-									{:else}
-										<Check class="w-4 h-4" />
-										<span>Simulasi Bayar QRIS Instan (Dev/Demo)</span>
-									{/if}
-								</button>
-							</div>
+
 						</div>
 					{:else}
 						<!-- Cash / Tunai View -->
@@ -353,12 +319,75 @@
 									</div>
 								</div>
 
-								<!-- Cashier Barcode / Verification QR -->
-								<div class="bg-white rounded-xl p-3 border border-slate-200 text-center space-y-1.5">
-									<QrCode class="w-16 h-16 text-slate-800 mx-auto" />
-									<span class="text-[10px] font-mono text-slate-500 font-bold block">
-										SCAN KASIR: {order.order_number}
-									</span>
+								<!-- Inline Cash Payment Invoice -->
+								<div class="bg-white rounded-xl p-3.5 border border-slate-200/90 shadow-2xs space-y-3">
+									<div class="flex items-center justify-between pb-2 border-b border-dashed border-slate-200">
+										<div class="flex items-center gap-2">
+											<div class="w-6 h-6 rounded-lg bg-orange-50 border border-orange-200 flex items-center justify-center text-orange-600">
+												<Receipt class="w-3.5 h-3.5" />
+											</div>
+											<span class="text-xs font-black text-slate-800 tracking-tight font-['Outfit']">INVOICE PEMBAYARAN</span>
+										</div>
+										<span class="text-[10px] text-slate-400 font-mono font-medium">{formatDateTime(order.created_at)}</span>
+									</div>
+
+									<!-- Item Breakdown -->
+									<div class="space-y-2 max-h-52 overflow-y-auto pr-0.5 divide-y divide-slate-100">
+										<div class="flex justify-between text-[10px] font-bold text-slate-400 uppercase tracking-wider pb-1">
+											<span>Menu ({order.items?.length || 0})</span>
+											<span>Subtotal</span>
+										</div>
+
+										{#each order.items || [] as item}
+											<div class="pt-1.5 flex items-start justify-between gap-2 text-xs">
+												<div class="min-w-0">
+													<div class="font-bold text-slate-800 flex items-center gap-1.5">
+														<span class="text-orange-600 font-mono text-[11px] font-bold">{item.quantity}x</span>
+														<span class="truncate">{item.menu_name_snapshot}</span>
+													</div>
+													{#if item.selected_modifiers && item.selected_modifiers.length > 0}
+														<div class="text-[10px] text-slate-500 pl-4 mt-0.5">
+															+ {item.selected_modifiers.map(m => m.option_name).join(', ')}
+														</div>
+													{/if}
+													{#if item.notes}
+														<div class="text-[10px] text-slate-400 italic pl-4">"{item.notes}"</div>
+													{/if}
+												</div>
+												<span class="font-bold text-slate-800 font-['Outfit'] shrink-0 text-xs">
+													{formatRupiah(item.subtotal)}
+												</span>
+											</div>
+										{/each}
+									</div>
+
+									<!-- Calculation Summary -->
+									<div class="pt-2 border-t border-dashed border-slate-200 space-y-1 text-xs text-slate-600">
+										<div class="flex justify-between text-[11px]">
+											<span>Subtotal</span>
+											<span class="font-semibold text-slate-800">{formatRupiah(order.subtotal)}</span>
+										</div>
+										<div class="flex justify-between text-[11px]">
+											<span>Pajak (PB1)</span>
+											<span class="font-semibold text-slate-800">{formatRupiah(order.tax)}</span>
+										</div>
+										{#if order.service_charge > 0}
+											<div class="flex justify-between text-[11px]">
+												<span>Biaya Layanan</span>
+												<span class="font-semibold text-slate-800">{formatRupiah(order.service_charge)}</span>
+											</div>
+										{/if}
+										{#if order.discount > 0}
+											<div class="flex justify-between text-[11px] text-emerald-600 font-semibold">
+												<span>Diskon</span>
+												<span>-{formatRupiah(order.discount)}</span>
+											</div>
+										{/if}
+										<div class="pt-1.5 border-t border-slate-200 flex justify-between items-center text-xs font-black text-slate-900">
+											<span class="uppercase tracking-tight text-slate-700">Total Wajib Bayar</span>
+											<span class="text-orange-600 font-['Outfit'] text-base font-extrabold">{formatRupiah(order.total)}</span>
+										</div>
+									</div>
 								</div>
 							</div>
 
@@ -384,21 +413,7 @@
 									</button>
 								</div>
 
-								<!-- Demo instant simulation for Cash payment -->
-								<button
-									type="button"
-									onclick={() => handleSimulatePayment('CASH')}
-									disabled={paying}
-									class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 rounded-xl shadow-xs text-xs flex items-center justify-center gap-2 disabled:opacity-50 transition-all active:scale-[0.98]"
-								>
-									{#if paying}
-										<div class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-										<span>Mengonfirmasi Kasir...</span>
-									{:else}
-										<Check class="w-4 h-4" />
-										<span>Simulasi Kasir Terima Tunai (Dev/Demo)</span>
-									{/if}
-								</button>
+
 							</div>
 						</div>
 					{/if}
@@ -754,18 +769,7 @@
 					<Printer class="w-4 h-4" />
 					<span>{isPaid ? 'Cetak Struk / Invoice' : 'Cetak Invoice Tagihan'}</span>
 				</button>
-				{#if !isPaid && selectedMethod === 'CASH'}
-					<button
-						type="button"
-						onclick={() => handleSimulatePayment('CASH')}
-						disabled={paying}
-						class="px-3.5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all active:scale-[0.98]"
-						title="Simulasi Kasir Terima Tunai"
-					>
-						<Check class="w-4 h-4" />
-						<span>Bayar Kasir</span>
-					</button>
-				{/if}
+
 				<button
 					type="button"
 					onclick={() => (showInvoiceModal = false)}

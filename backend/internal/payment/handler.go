@@ -23,51 +23,10 @@ func (h *Handler) RegisterRoutes(r *gin.RouterGroup) {
 	r.GET("/orders/:id/payment", h.GetPaymentByOrderID)
 	r.GET("/payments/:id", h.GetPayment)
 	r.POST("/payments/webhook", h.HandleWebhook)
-	r.POST("/payments/simulate-pay", h.SimulatePay)
-}
-
-type CreatePaymentInput struct {
-	PaymentMethod   string  `json:"payment_method"`
-	PaidAmount      int64   `json:"paid_amount"`
-	ReferenceNumber *string `json:"reference_number"`
 }
 
 func (h *Handler) CreatePayment(c *gin.Context) {
 	orderID := c.Param("id")
-
-	var input CreatePaymentInput
-	_ = c.ShouldBindJSON(&input)
-
-	if input.PaymentMethod != "" {
-		res, err := h.service.ProcessManualPayment(c.Request.Context(), ProcessManualPaymentRequest{
-			OrderID:         orderID,
-			PaymentMethod:   input.PaymentMethod,
-			PaidAmount:      input.PaidAmount,
-			ReferenceNumber: input.ReferenceNumber,
-		})
-		if err != nil {
-			if errors.Is(err, ErrOrderAlreadyPaid) {
-				response.Conflict(c, "ORDER_ALREADY_PAID", "Order is already paid")
-				return
-			}
-			if errors.Is(err, ErrInsufficientPaidAmount) {
-				response.BadRequest(c, "INSUFFICIENT_PAYMENT", err.Error())
-				return
-			}
-			if errors.Is(err, ErrInvalidPaymentMethod) {
-				response.BadRequest(c, "INVALID_PAYMENT_METHOD", err.Error())
-				return
-			}
-			if errors.Is(err, ErrOrderCancelled) {
-				response.Conflict(c, "ORDER_CANCELLED", err.Error())
-				return
-			}
-			response.InternalServerError(c, "PAYMENT_FAILED", err.Error())
-			return
-		}
-		response.OK(c, res, "Payment processed successfully")
-		return
-	}
 
 	payment, err := h.service.CreatePaymentForOrder(c.Request.Context(), orderID)
 	if err != nil {

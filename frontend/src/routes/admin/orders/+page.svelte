@@ -29,9 +29,9 @@
 			return;
 		}
 		try {
-			await api.post('/payments/simulate-pay', {
-				order_id: o.id,
-				payment_method: 'CASH'
+			await api.post(`/cashier/orders/${o.id}/payment`, {
+				payment_method: 'CASH',
+				paid_amount: o.total
 			});
 			await loadOrders();
 			if (selectedOrder?.id === o.id) {

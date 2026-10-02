@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"runtime"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -12,6 +13,7 @@ import (
 
 var (
 	ErrRestaurantNotFound = errors.New("restaurant not found")
+	serverStartTime       = time.Now()
 )
 
 type Restaurant struct {
@@ -41,12 +43,55 @@ type TenantSummary struct {
 }
 
 type PlatformStats struct {
-	TotalRestaurants     int   `json:"total_restaurants"`
-	ActiveRestaurants    int   `json:"active_restaurants"`
-	SuspendedRestaurants int   `json:"suspended_restaurants"`
-	TotalOwners          int   `json:"total_owners"`
-	TotalOrders          int   `json:"total_orders"`
-	TotalRevenue         int64 `json:"total_revenue"`
+	TotalRestaurants     int            `json:"total_restaurants"`
+	ActiveRestaurants    int            `json:"active_restaurants"`
+	SuspendedRestaurants int            `json:"suspended_restaurants"`
+	TotalOwners          int            `json:"total_owners"`
+	TotalOrders          int            `json:"total_orders"`
+	TotalRevenue         int64          `json:"total_revenue"`
+	TotalTables          int            `json:"total_tables"`
+	TotalMenus           int            `json:"total_menus"`
+	TodayRevenue         int64          `json:"today_revenue"`
+	TodayOrders          int            `json:"today_orders"`
+	PlanDistribution     map[string]int `json:"plan_distribution"`
+}
+
+type PlatformOrder struct {
+	ID             string    `json:"id"`
+	RestaurantID   string    `json:"restaurant_id"`
+	RestaurantName string    `json:"restaurant_name"`
+	RestaurantSlug string    `json:"restaurant_slug"`
+	TableName      string    `json:"table_name"`
+	OrderNumber    string    `json:"order_number"`
+	Status         string    `json:"status"`
+	PaymentStatus  string    `json:"payment_status"`
+	PaymentMethod  string    `json:"payment_method"`
+	Total          int64     `json:"total"`
+	CreatedAt      time.Time `json:"created_at"`
+}
+
+type PlatformOwner struct {
+	ID             string    `json:"id"`
+	Name           string    `json:"name"`
+	Email          string    `json:"email"`
+	Status         string    `json:"status"`
+	CreatedAt      time.Time `json:"created_at"`
+	RestaurantID   string    `json:"restaurant_id"`
+	RestaurantName string    `json:"restaurant_name"`
+	RestaurantSlug string    `json:"restaurant_slug"`
+	RestaurantPlan string    `json:"restaurant_plan"`
+	Phone          string    `json:"phone"`
+}
+
+type SystemHealth struct {
+	Status         string    `json:"status"`
+	Database       string    `json:"database"`
+	PoolTotalConns int32     `json:"pool_total_conns"`
+	PoolIdleConns  int32     `json:"pool_idle_conns"`
+	Goroutines     int       `json:"goroutines"`
+	MemoryAllocMB  float64   `json:"memory_alloc_mb"`
+	UptimeSeconds  int64     `json:"uptime_seconds"`
+	Timestamp      time.Time `json:"timestamp"`
 }
 
 type OnboardTenantRequest struct {
@@ -83,6 +128,9 @@ type Repository interface {
 	GetPlatformStats(ctx context.Context) (*PlatformStats, error)
 	OnboardTenant(ctx context.Context, req OnboardTenantRequest, passwordHash string) (*TenantSummary, error)
 	Delete(ctx context.Context, id string) error
+	ListRecentOrders(ctx context.Context, limit int) ([]PlatformOrder, error)
+	ListOwners(ctx context.Context) ([]PlatformOwner, error)
+	GetSystemHealth(ctx context.Context) (*SystemHealth, error)
 }
 
 type repository struct {
@@ -246,7 +294,11 @@ func (r *repository) GetPlatformStats(ctx context.Context) (*PlatformStats, erro
 			COALESCE(COUNT(*) FILTER (WHERE status != 'ACTIVE'), 0) as suspended_restaurants,
 			COALESCE((SELECT COUNT(*) FROM users WHERE role = 'OWNER'), 0) as total_owners,
 			COALESCE((SELECT COUNT(*) FROM orders), 0) as total_orders,
-			COALESCE((SELECT SUM(total) FROM orders WHERE status IN ('CONFIRMED','PREPARING','READY','COMPLETED')), 0) as total_revenue
+			COALESCE((SELECT SUM(total) FROM orders WHERE status IN ('CONFIRMED','PREPARING','READY','COMPLETED')), 0) as total_revenue,
+			COALESCE((SELECT COUNT(*) FROM tables), 0) as total_tables,
+			COALESCE((SELECT COUNT(*) FROM menus), 0) as total_menus,
+			COALESCE((SELECT SUM(total) FROM orders WHERE status IN ('CONFIRMED','PREPARING','READY','COMPLETED') AND created_at >= CURRENT_DATE), 0) as today_revenue,
+			COALESCE((SELECT COUNT(*) FROM orders WHERE created_at >= CURRENT_DATE), 0) as today_orders
 		FROM restaurants
 	`
 	var s PlatformStats
@@ -257,10 +309,28 @@ func (r *repository) GetPlatformStats(ctx context.Context) (*PlatformStats, erro
 		&s.TotalOwners,
 		&s.TotalOrders,
 		&s.TotalRevenue,
+		&s.TotalTables,
+		&s.TotalMenus,
+		&s.TodayRevenue,
+		&s.TodayOrders,
 	)
 	if err != nil {
 		return nil, err
 	}
+
+	s.PlanDistribution = make(map[string]int)
+	planRows, err := r.pool.Query(ctx, "SELECT COALESCE(plan, 'PRO'), COUNT(*) FROM restaurants GROUP BY plan")
+	if err == nil {
+		defer planRows.Close()
+		for planRows.Next() {
+			var plan string
+			var count int
+			if err := planRows.Scan(&plan, &count); err == nil {
+				s.PlanDistribution[plan] = count
+			}
+		}
+	}
+
 	return &s, nil
 }
 
@@ -374,4 +444,94 @@ func (r *repository) Delete(ctx context.Context, id string) error {
 	query := `DELETE FROM restaurants WHERE id = $1`
 	_, err := r.pool.Exec(ctx, query, id)
 	return err
+}
+
+func (r *repository) ListRecentOrders(ctx context.Context, limit int) ([]PlatformOrder, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+	query := `
+		SELECT 
+			o.id, o.restaurant_id, r.name, r.slug, COALESCE(t.name, 'Meja -'),
+			o.order_number, o.status, COALESCE(o.payment_status, 'UNPAID'), COALESCE(o.payment_method, '-'),
+			o.total, o.created_at
+		FROM orders o
+		JOIN restaurants r ON r.id = o.restaurant_id
+		LEFT JOIN tables t ON t.id = o.table_id
+		ORDER BY o.created_at DESC
+		LIMIT $1
+	`
+	rows, err := r.pool.Query(ctx, query, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var orders []PlatformOrder
+	for rows.Next() {
+		var o PlatformOrder
+		err := rows.Scan(
+			&o.ID, &o.RestaurantID, &o.RestaurantName, &o.RestaurantSlug, &o.TableName,
+			&o.OrderNumber, &o.Status, &o.PaymentStatus, &o.PaymentMethod,
+			&o.Total, &o.CreatedAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+		orders = append(orders, o)
+	}
+	return orders, nil
+}
+
+func (r *repository) ListOwners(ctx context.Context) ([]PlatformOwner, error) {
+	query := `
+		SELECT 
+			u.id, u.name, u.email, u.status, u.created_at,
+			r.id, r.name, r.slug, COALESCE(r.plan, 'PRO'), COALESCE(r.phone, '-')
+		FROM users u
+		JOIN restaurants r ON r.id = u.restaurant_id
+		WHERE u.role = 'OWNER'
+		ORDER BY u.created_at DESC
+	`
+	rows, err := r.pool.Query(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var owners []PlatformOwner
+	for rows.Next() {
+		var ow PlatformOwner
+		err := rows.Scan(
+			&ow.ID, &ow.Name, &ow.Email, &ow.Status, &ow.CreatedAt,
+			&ow.RestaurantID, &ow.RestaurantName, &ow.RestaurantSlug, &ow.RestaurantPlan, &ow.Phone,
+		)
+		if err != nil {
+			return nil, err
+		}
+		owners = append(owners, ow)
+	}
+	return owners, nil
+}
+
+func (r *repository) GetSystemHealth(ctx context.Context) (*SystemHealth, error) {
+	stat := r.pool.Stat()
+	var mem runtime.MemStats
+	runtime.ReadMemStats(&mem)
+
+	dbStatus := "connected"
+	if err := r.pool.Ping(ctx); err != nil {
+		dbStatus = "disconnected"
+	}
+
+	return &SystemHealth{
+		Status:         "operational",
+		Database:       dbStatus,
+		PoolTotalConns: stat.TotalConns(),
+		PoolIdleConns:  stat.IdleConns(),
+		Goroutines:     runtime.NumGoroutine(),
+		MemoryAllocMB:  float64(mem.Alloc) / 1024 / 1024,
+		UptimeSeconds:  int64(time.Since(serverStartTime).Seconds()),
+		Timestamp:      time.Now(),
+	}, nil
 }

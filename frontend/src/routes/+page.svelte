@@ -39,7 +39,7 @@
 				href="/order?token=demo-qr-token-table-01"
 				class="text-xs font-bold bg-orange-600 hover:bg-orange-500 text-white px-3.5 sm:px-5 py-2.5 rounded-xl shadow-lg shadow-orange-600/30 transition-all active:scale-95"
 			>
-				Mulai Demo
+				Pesan Sekarang
 			</a>
 		</div>
 	</header>
@@ -62,7 +62,7 @@
 			Pelanggan memindai QR Code di meja, memilih hidangan favorit, membayar via QRIS secara instan, dan pesanan otomatis langsung diterima di dapur tanpa antrean.
 		</p>
 
-		<!-- Interactive Demo Portals Grid -->
+		<!-- Interactive Portals Grid -->
 		<div class="grid grid-cols-1 md:grid-cols-3 gap-6 pt-8 text-left">
 			<!-- 1. Customer Self-Order -->
 			<a
@@ -78,7 +78,7 @@
 							Pelanggan (Meja 01)
 						</h3>
 						<p class="text-xs text-slate-400 mt-1 leading-relaxed">
-							Simulasi scan QR meja, lihat katalog digital, atur modifier hidangan, keranjang, dan bayar dengan QRIS.
+							Scan QR meja, lihat katalog digital, atur modifier hidangan, keranjang, dan bayar dengan mudah.
 						</p>
 					</div>
 				</div>

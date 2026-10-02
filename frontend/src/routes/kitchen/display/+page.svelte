@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
+	import { goto } from '$app/navigation';
 	import { api } from '$lib/api/client';
 	import { auth } from '$lib/stores/auth.svelte';
 	import type { Order } from '$lib/types';
@@ -121,13 +122,12 @@
 	let activeOrdersCount = $derived(confirmedOrders.length + preparingOrders.length + readyOrders.length);
 
 	onMount(async () => {
-		// Auto demo login if not authenticated
+		if (!auth.initialized) {
+			await auth.init();
+		}
 		if (!auth.user) {
-			try {
-				await auth.login('kitchen@resto.com', 'password123');
-			} catch (e) {
-				console.error('Auto login kitchen failed', e);
-			}
+			goto('/login');
+			return;
 		}
 
 		await loadOrders();

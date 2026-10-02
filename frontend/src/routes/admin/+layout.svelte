@@ -14,13 +14,13 @@
 
 	const navItems = [
 		{ href: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-		{ href: '/admin/cashier', label: 'Kasir POS', icon: CreditCard, roles: ['OWNER', 'ADMIN', 'CASHIER'] },
-		{ href: '/admin/orders', label: 'Pesanan Masuk', icon: ShoppingCart },
-		{ href: '/admin/menus', label: 'Menu & Kategori', icon: Utensils },
-		{ href: '/admin/tables', label: 'Meja & QR Code', icon: QrCode },
-		{ href: '/admin/registers', label: 'Mesin Kasir', icon: Monitor, roles: ['OWNER', 'ADMIN'] },
-		{ href: '/admin/shifts', label: 'Laporan Shift', icon: ClipboardList, roles: ['OWNER', 'ADMIN'] },
-		{ href: '/admin/users', label: 'Kelola Karyawan', icon: Users, roles: ['OWNER', 'ADMIN'] },
+		{ href: '/admin/cashier', label: 'Kasir POS', icon: CreditCard, roles: ['SUPERADMIN', 'OWNER', 'ADMIN', 'CASHIER'] },
+		{ href: '/admin/orders', label: 'Pesanan Masuk', icon: ShoppingCart, roles: ['SUPERADMIN', 'OWNER', 'ADMIN', 'CASHIER'] },
+		{ href: '/admin/menus', label: 'Menu & Kategori', icon: Utensils, roles: ['SUPERADMIN', 'OWNER', 'ADMIN'] },
+		{ href: '/admin/tables', label: 'Meja & QR Code', icon: QrCode, roles: ['SUPERADMIN', 'OWNER', 'ADMIN'] },
+		{ href: '/admin/registers', label: 'Mesin Kasir', icon: Monitor, roles: ['SUPERADMIN', 'OWNER', 'ADMIN', 'CASHIER'] },
+		{ href: '/admin/shifts', label: 'Laporan Shift', icon: ClipboardList, roles: ['SUPERADMIN', 'OWNER', 'ADMIN'] },
+		{ href: '/admin/users', label: 'Kelola Karyawan', icon: Users, roles: ['SUPERADMIN', 'OWNER', 'ADMIN'] },
 		{ href: '/superadmin', label: 'Superadmin HQ', icon: ShieldCheck, roles: ['SUPERADMIN'] }
 	];
 
@@ -29,12 +29,7 @@
 			await auth.init();
 		}
 		if (!auth.user) {
-			// Auto login as admin for demonstration convenience if not logged in
-			try {
-				await auth.login('admin@resto.com', 'password123');
-			} catch (e) {
-				goto('/login');
-			}
+			goto('/login');
 		}
 	});
 
@@ -94,7 +89,7 @@
 				>
 					<div class="flex items-center gap-3">
 						<QrCode class="w-4 h-4 text-emerald-400" />
-						<span>Simulasi Pelanggan</span>
+						<span>Menu Pelanggan</span>
 					</div>
 					<ExternalLink class="w-3.5 h-3.5 text-slate-500" />
 				</a>
@@ -182,7 +177,7 @@
 					>
 						<div class="flex items-center gap-3">
 							<QrCode class="w-4 h-4 text-emerald-400" />
-							<span>Simulasi Pelanggan</span>
+							<span>Menu Pelanggan</span>
 						</div>
 						<ExternalLink class="w-3.5 h-3.5 text-slate-500" />
 					</a>

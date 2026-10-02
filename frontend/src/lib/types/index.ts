@@ -42,6 +42,49 @@ export interface PlatformStats {
 	total_owners: number;
 	total_orders: number;
 	total_revenue: number;
+	total_tables?: number;
+	total_menus?: number;
+	today_revenue?: number;
+	today_orders?: number;
+	plan_distribution?: Record<string, number>;
+}
+
+export interface PlatformOrder {
+	id: string;
+	restaurant_id: string;
+	restaurant_name: string;
+	restaurant_slug: string;
+	table_name: string;
+	order_number: string;
+	status: string;
+	payment_status: string;
+	payment_method: string;
+	total: number;
+	created_at: string;
+}
+
+export interface PlatformOwner {
+	id: string;
+	name: string;
+	email: string;
+	status: string;
+	created_at: string;
+	restaurant_id: string;
+	restaurant_name: string;
+	restaurant_slug: string;
+	restaurant_plan: string;
+	phone: string;
+}
+
+export interface SystemHealth {
+	status: string;
+	database: string;
+	pool_total_conns: number;
+	pool_idle_conns: number;
+	goroutines: number;
+	memory_alloc_mb: number;
+	uptime_seconds: number;
+	timestamp: string;
 }
 
 export interface Table {

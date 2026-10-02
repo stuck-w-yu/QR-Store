@@ -35,47 +35,47 @@ func (h *Handler) RegisterRoutes(r *gin.RouterGroup) {
 	// 1. Registers
 	regGroup := r.Group("/registers", authMW)
 	{
-		regGroup.GET("", auth.RequireRoles(auth.RoleOwner, auth.RoleAdmin, auth.RoleCashier), h.ListRegisters)
-		regGroup.POST("", auth.RequireRoles(auth.RoleOwner, auth.RoleAdmin), h.CreateRegister)
-		regGroup.GET("/:id", auth.RequireRoles(auth.RoleOwner, auth.RoleAdmin, auth.RoleCashier), h.GetRegister)
-		regGroup.PATCH("/:id", auth.RequireRoles(auth.RoleOwner, auth.RoleAdmin), h.UpdateRegister)
-		regGroup.DELETE("/:id", auth.RequireRoles(auth.RoleOwner, auth.RoleAdmin), h.DeleteRegister)
+		regGroup.GET("", auth.RequireRoles(auth.RoleSuperadmin, auth.RoleOwner, auth.RoleAdmin, auth.RoleCashier), h.ListRegisters)
+		regGroup.POST("", auth.RequireRoles(auth.RoleSuperadmin, auth.RoleOwner, auth.RoleAdmin), h.CreateRegister)
+		regGroup.GET("/:id", auth.RequireRoles(auth.RoleSuperadmin, auth.RoleOwner, auth.RoleAdmin, auth.RoleCashier), h.GetRegister)
+		regGroup.PATCH("/:id", auth.RequireRoles(auth.RoleSuperadmin, auth.RoleOwner, auth.RoleAdmin), h.UpdateRegister)
+		regGroup.DELETE("/:id", auth.RequireRoles(auth.RoleSuperadmin, auth.RoleOwner, auth.RoleAdmin), h.DeleteRegister)
 	}
 
 	// 2. Cashier Shifts
 	shiftGroup := r.Group("/cashier/shifts", authMW)
 	{
-		shiftGroup.GET("/current", auth.RequireRoles(auth.RoleOwner, auth.RoleAdmin, auth.RoleCashier), h.GetCurrentShift)
-		shiftGroup.POST("", auth.RequireRoles(auth.RoleOwner, auth.RoleAdmin, auth.RoleCashier), h.OpenShift)
-		shiftGroup.GET("/:id", auth.RequireRoles(auth.RoleOwner, auth.RoleAdmin, auth.RoleCashier), h.GetShiftByID)
-		shiftGroup.GET("/:id/transactions", auth.RequireRoles(auth.RoleOwner, auth.RoleAdmin, auth.RoleCashier), h.GetShiftTransactions)
-		shiftGroup.GET("/:id/summary", auth.RequireRoles(auth.RoleOwner, auth.RoleAdmin, auth.RoleCashier), h.GetShiftSummary)
-		shiftGroup.POST("/:id/close", auth.RequireRoles(auth.RoleOwner, auth.RoleAdmin, auth.RoleCashier), h.CloseShift)
+		shiftGroup.GET("/current", auth.RequireRoles(auth.RoleSuperadmin, auth.RoleOwner, auth.RoleAdmin, auth.RoleCashier), h.GetCurrentShift)
+		shiftGroup.POST("", auth.RequireRoles(auth.RoleSuperadmin, auth.RoleOwner, auth.RoleAdmin, auth.RoleCashier), h.OpenShift)
+		shiftGroup.GET("/:id", auth.RequireRoles(auth.RoleSuperadmin, auth.RoleOwner, auth.RoleAdmin, auth.RoleCashier), h.GetShiftByID)
+		shiftGroup.GET("/:id/transactions", auth.RequireRoles(auth.RoleSuperadmin, auth.RoleOwner, auth.RoleAdmin, auth.RoleCashier), h.GetShiftTransactions)
+		shiftGroup.GET("/:id/summary", auth.RequireRoles(auth.RoleSuperadmin, auth.RoleOwner, auth.RoleAdmin, auth.RoleCashier), h.GetShiftSummary)
+		shiftGroup.POST("/:id/close", auth.RequireRoles(auth.RoleSuperadmin, auth.RoleOwner, auth.RoleAdmin, auth.RoleCashier), h.CloseShift)
 	}
 
 	// 3. Refund & Void
 	orderGroup := r.Group("/orders", authMW)
 	{
-		orderGroup.POST("/:id/refund", auth.RequireRoles(auth.RoleOwner, auth.RoleAdmin, auth.RoleCashier), h.CreateRefund)
-		orderGroup.POST("/:id/void", auth.RequireRoles(auth.RoleOwner, auth.RoleAdmin, auth.RoleCashier), h.CreateVoid)
+		orderGroup.POST("/:id/refund", auth.RequireRoles(auth.RoleSuperadmin, auth.RoleOwner, auth.RoleAdmin, auth.RoleCashier), h.CreateRefund)
+		orderGroup.POST("/:id/void", auth.RequireRoles(auth.RoleSuperadmin, auth.RoleOwner, auth.RoleAdmin, auth.RoleCashier), h.CreateVoid)
 	}
 
 	// 4. Reports
 	reportGroup := r.Group("/reports/shifts", authMW)
 	{
-		reportGroup.GET("", auth.RequireRoles(auth.RoleOwner, auth.RoleAdmin), h.ListReports)
-		reportGroup.GET("/:id", auth.RequireRoles(auth.RoleOwner, auth.RoleAdmin), h.GetReportDetail)
+		reportGroup.GET("", auth.RequireRoles(auth.RoleSuperadmin, auth.RoleOwner, auth.RoleAdmin), h.ListReports)
+		reportGroup.GET("/:id", auth.RequireRoles(auth.RoleSuperadmin, auth.RoleOwner, auth.RoleAdmin), h.GetReportDetail)
 	}
 
 	// 5. Cashier Orders (PRD Section 28)
 	cashierOrders := r.Group("/cashier/orders", authMW)
 	{
-		cashierOrders.GET("", auth.RequireRoles(auth.RoleOwner, auth.RoleAdmin, auth.RoleCashier), h.ListOrders)
-		cashierOrders.GET("/:id", auth.RequireRoles(auth.RoleOwner, auth.RoleAdmin, auth.RoleCashier), h.GetOrder)
-		cashierOrders.POST("/:id/confirm", auth.RequireRoles(auth.RoleOwner, auth.RoleAdmin, auth.RoleCashier), h.ConfirmOrder)
-		cashierOrders.POST("/:id/payment", auth.RequireRoles(auth.RoleOwner, auth.RoleAdmin, auth.RoleCashier), h.ProcessPayment)
-		cashierOrders.POST("/:id/cancel", auth.RequireRoles(auth.RoleOwner, auth.RoleAdmin, auth.RoleCashier), h.CancelOrder)
-		cashierOrders.POST("/:id/void", auth.RequireRoles(auth.RoleOwner, auth.RoleAdmin, auth.RoleCashier), h.CreateVoid)
+		cashierOrders.GET("", auth.RequireRoles(auth.RoleSuperadmin, auth.RoleOwner, auth.RoleAdmin, auth.RoleCashier), h.ListOrders)
+		cashierOrders.GET("/:id", auth.RequireRoles(auth.RoleSuperadmin, auth.RoleOwner, auth.RoleAdmin, auth.RoleCashier), h.GetOrder)
+		cashierOrders.POST("/:id/confirm", auth.RequireRoles(auth.RoleSuperadmin, auth.RoleOwner, auth.RoleAdmin, auth.RoleCashier), h.ConfirmOrder)
+		cashierOrders.POST("/:id/payment", auth.RequireRoles(auth.RoleSuperadmin, auth.RoleOwner, auth.RoleAdmin, auth.RoleCashier), h.ProcessPayment)
+		cashierOrders.POST("/:id/cancel", auth.RequireRoles(auth.RoleSuperadmin, auth.RoleOwner, auth.RoleAdmin, auth.RoleCashier), h.CancelOrder)
+		cashierOrders.POST("/:id/void", auth.RequireRoles(auth.RoleSuperadmin, auth.RoleOwner, auth.RoleAdmin, auth.RoleCashier), h.CreateVoid)
 	}
 }
 
@@ -439,8 +439,6 @@ type CashierPaymentRequest struct {
 
 func (h *Handler) ProcessPayment(c *gin.Context) {
 	id := c.Param("id")
-	restoID, _ := c.Get(auth.CtxRestaurantID)
-	userID, _ := c.Get(auth.CtxUserID)
 
 	var req CashierPaymentRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -448,10 +446,23 @@ func (h *Handler) ProcessPayment(c *gin.Context) {
 		return
 	}
 
+	var restaurantID string
+	if rVal, exists := c.Get(auth.CtxRestaurantID); exists && rVal != nil {
+		if s, ok := rVal.(string); ok {
+			restaurantID = s
+		}
+	}
+	var currentUserID string
+	if uVal, exists := c.Get(auth.CtxUserID); exists && uVal != nil {
+		if s, ok := uVal.(string); ok {
+			currentUserID = s
+		}
+	}
+
 	res, err := h.paymentService.ProcessManualPayment(c.Request.Context(), payment.ProcessManualPaymentRequest{
 		OrderID:         id,
-		RestaurantID:    restoID.(string),
-		CashierID:       userID.(string),
+		RestaurantID:    restaurantID,
+		CashierID:       currentUserID,
 		PaymentMethod:   req.PaymentMethod,
 		PaidAmount:      req.PaidAmount,
 		ReferenceNumber: req.ReferenceNumber,
