@@ -10,6 +10,7 @@
 		Receipt, Printer, Store, X, Eye, Wallet,
 		Upload, Camera, Trash2, Image as ImageIcon
 	} from '@lucide/svelte';
+	import { uploadToGDrive, deleteFromGDrive } from '$lib/services/gdriveBucket';
 
 	const orderId = page.params.orderId;
 
@@ -28,6 +29,8 @@
 	let proofUploadedAt = $state<string>('');
 	let isUploadingProof = $state(false);
 	let showProofModal = $state(false);
+	let gdriveFileUrl = $state<string | null>(null);
+	let gdriveFileId = $state<string | null>(null);
 
 	const isPaid = $derived(!!(order && order.status !== 'WAITING_PAYMENT' && order.status !== 'CANCELLED'));
 
@@ -89,7 +92,6 @@
 					console.error('Failed to create payment session', e);
 				}
 			} else {
-				// Fetch existing payment details for the invoice
 				try {
 					const p = await api.get<Payment>(`/orders/${orderId}/payment`);
 					payment = p;
@@ -97,7 +99,6 @@
 					console.log('Payment record not found or not created yet');
 				}
 
-				// Automatically show invoice once upon visiting completed order
 				if (!invoiceAutoShown) {
 					invoiceAutoShown = true;
 					showInvoiceModal = true;
@@ -129,7 +130,6 @@
 							const prevStatus = order?.status;
 							order = msg.data.order;
 
-							// Confetti celebration & show invoice on payment success!
 							if (prevStatus === 'WAITING_PAYMENT' && order?.status === 'CONFIRMED') {
 								api.get<Payment>(`/orders/${orderId}/payment`).then((p) => {
 									payment = p;
@@ -159,9 +159,7 @@
 		}
 	}
 
-
-
-	function handleFileUpload(e: Event) {
+	async function handleFileUpload(e: Event) {
 		const target = e.target as HTMLInputElement;
 		if (!target.files || target.files.length === 0) return;
 		const file = target.files[0];
@@ -171,32 +169,66 @@
 		}
 
 		isUploadingProof = true;
+		proofFileName = file.name;
+		proofFileSize = (file.size / 1024).toFixed(1) + ' KB';
+		proofUploadedAt = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+
+		// Tampilkan preview lokal instan
 		const reader = new FileReader();
 		reader.onload = () => {
-			const base64 = reader.result as string;
-			proofImage = base64;
-			proofFileName = file.name;
-			proofFileSize = (file.size / 1024).toFixed(1) + ' KB';
-			proofUploadedAt = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
-			isUploadingProof = false;
-
-			try {
-				localStorage.setItem(`payment_proof_${orderId}`, JSON.stringify({
-					image: base64,
-					fileName: file.name,
-					fileSize: proofFileSize,
-					uploadedAt: proofUploadedAt
-				}));
-			} catch (_) {}
+			proofImage = reader.result as string;
 		};
 		reader.readAsDataURL(file);
+
+		// Unggah secara asinkron ke bucket Google Drive
+		try {
+			// Jika sudah ada bukti sebelumnya yang terunggah ke GDrive, bersihkan file lama
+			if (gdriveFileId || gdriveFileUrl) {
+				deleteFromGDrive(gdriveFileId || gdriveFileUrl);
+			}
+
+			const result = await uploadToGDrive(file, {
+				folder: 'bukti_pembayaran',
+				filename: `bukti_${order?.order_number || orderId}_${file.name}`,
+				compress: true
+			});
+
+			if (result.status === 'success') {
+				gdriveFileUrl = result.directUrl || result.fileUrl || null;
+				gdriveFileId = result.fileId || null;
+			}
+		} catch (err) {
+			console.error('Google Drive upload error (fallback to local preview)', err);
+		} finally {
+			isUploadingProof = false;
+			try {
+				localStorage.setItem(`payment_proof_${orderId}`, JSON.stringify({
+					image: proofImage,
+					fileName: file.name,
+					fileSize: proofFileSize,
+					uploadedAt: proofUploadedAt,
+					gdriveUrl: gdriveFileUrl,
+					gdriveId: gdriveFileId
+				}));
+			} catch (_) {}
+		}
 	}
 
-	function removeProof() {
+	async function removeProof() {
+		// Hapus juga file gambar bukti dari Google Drive
+		if (gdriveFileId || gdriveFileUrl) {
+			try {
+				await deleteFromGDrive(gdriveFileId || gdriveFileUrl);
+			} catch (err) {
+				console.warn('Gagal menghapus bukti dari Google Drive:', err);
+			}
+		}
 		proofImage = null;
 		proofFileName = '';
 		proofFileSize = '';
 		proofUploadedAt = '';
+		gdriveFileUrl = null;
+		gdriveFileId = null;
 		try {
 			localStorage.removeItem(`payment_proof_${orderId}`);
 		} catch (_) {}
@@ -213,6 +245,8 @@
 				proofFileName = d.fileName;
 				proofFileSize = d.fileSize;
 				proofUploadedAt = d.uploadedAt;
+				gdriveFileUrl = d.gdriveUrl || null;
+				gdriveFileId = d.gdriveId || null;
 			}
 		} catch (_) {}
 	});
@@ -394,13 +428,26 @@
 											</button>
 
 											<div class="min-w-0 flex-1">
-												<p class="text-xs font-bold text-slate-900 truncate" title={proofFileName}>
-													{proofFileName || 'bukti-pembayaran.jpg'}
-												</p>
+												<div class="flex items-center gap-1.5 flex-wrap">
+													<p class="text-xs font-bold text-slate-900 truncate" title={proofFileName}>
+														{proofFileName || 'bukti-pembayaran.jpg'}
+													</p>
+													{#if isUploadingProof}
+														<span class="inline-flex items-center gap-1 text-[10px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full font-bold border border-amber-200">
+															<RefreshCw class="w-2.5 h-2.5 animate-spin text-amber-600" />
+															Mengunggah ke GDrive...
+														</span>
+													{:else if gdriveFileUrl}
+														<span class="inline-flex items-center gap-1 text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full font-bold border border-emerald-200">
+															<CheckCircle2 class="w-2.5 h-2.5 text-emerald-600" />
+															Tersimpan di GDrive
+														</span>
+													{/if}
+												</div>
 												<p class="text-[11px] text-slate-400 font-medium">
 													{proofFileSize} &bull; Diunggah {proofUploadedAt || 'Baru saja'}
 												</p>
-												<div class="mt-1.5 flex items-center gap-2">
+												<div class="mt-1.5 flex items-center gap-2 flex-wrap">
 													<button
 														type="button"
 														onclick={() => (showProofModal = true)}
@@ -409,6 +456,17 @@
 														<Eye class="w-3.5 h-3.5" />
 														Lihat Foto
 													</button>
+													{#if gdriveFileUrl}
+														<span class="text-slate-200">&bull;</span>
+														<a
+															href={gdriveFileUrl}
+															target="_blank"
+															rel="noopener noreferrer"
+															class="text-[11px] font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1"
+														>
+															Folder GDrive
+														</a>
+													{/if}
 													<span class="text-slate-200">&bull;</span>
 													<label class="text-[11px] font-bold text-slate-600 hover:text-slate-900 cursor-pointer">
 														<span>Ganti Foto</span>

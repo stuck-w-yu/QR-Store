@@ -25,9 +25,10 @@
 		fileSize: string;
 		uploadedAt: string;
 		orderNumber: string;
+		gdriveUrl?: string;
 	} | null>(null);
 
-	function getOrderProof(orderId: string): { image: string; fileName: string; fileSize: string; uploadedAt: string } | null {
+	function getOrderProof(orderId: string): { image: string; fileName: string; fileSize: string; uploadedAt: string; gdriveUrl?: string; gdriveId?: string } | null {
 		if (typeof window === 'undefined') return null;
 		try {
 			const saved = localStorage.getItem(`payment_proof_${orderId}`);
@@ -973,17 +974,29 @@
 				/>
 			</div>
 
-			<div class="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
-				<span class="text-[11px] text-slate-500 font-medium">
-					Verifikasi nominal, tanggal, & tujuan transfer sebelum konfirmasi
+			<div class="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between gap-2">
+				<span class="text-[11px] text-slate-500 font-medium truncate">
+					Verifikasi nominal & tujuan transfer
 				</span>
-				<button
-					type="button"
-					onclick={() => (viewProofModalData = null)}
-					class="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl transition-colors cursor-pointer"
-				>
-					Tutup Pratinjau
-				</button>
+				<div class="flex items-center gap-2 shrink-0">
+					{#if viewProofModalData.gdriveUrl}
+						<a
+							href={viewProofModalData.gdriveUrl}
+							target="_blank"
+							rel="noopener noreferrer"
+							class="px-3 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-xs rounded-xl border border-blue-200 transition-colors inline-flex items-center gap-1.5"
+						>
+							<span>Buka di Google Drive</span>
+						</a>
+					{/if}
+					<button
+						type="button"
+						onclick={() => (viewProofModalData = null)}
+						class="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl transition-colors cursor-pointer"
+					>
+						Tutup
+					</button>
+				</div>
 			</div>
 		</div>
 	</div>

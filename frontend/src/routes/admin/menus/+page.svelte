@@ -4,8 +4,10 @@
 	import type { Category, Menu } from '$lib/types';
 	import { 
 		Plus, Utensils, Trash2, Check, X, 
-		Image, ToggleLeft, ToggleRight, FolderPlus 
+		Image, ToggleLeft, ToggleRight, FolderPlus,
+		Upload, Loader2
 	} from '@lucide/svelte';
+	import { uploadToGDrive, deleteFromGDrive } from '$lib/services/gdriveBucket';
 
 	let categories = $state<Category[]>([]);
 	let menus = $state<Menu[]>([]);
@@ -14,6 +16,7 @@
 	// Modal / Form state
 	let showAddMenu = $state(false);
 	let showAddCategory = $state(false);
+	let uploadingMenuImage = $state(false);
 
 	let newCatName = $state('');
 	let newMenu = $state({
@@ -24,6 +27,65 @@
 		image_url: '',
 		available: true
 	});
+
+	async function handleMenuImageUpload(e: Event) {
+		const target = e.target as HTMLInputElement;
+		if (!target.files || target.files.length === 0) return;
+		const file = target.files[0];
+		if (!file.type.startsWith('image/')) {
+			alert('Mohon pilih file gambar (JPG, PNG, WEBP).');
+			return;
+		}
+
+		uploadingMenuImage = true;
+		try {
+			// Jika sebelumnya sudah upload gambar di form ini, hapus gambar lama dari GDrive
+			if (newMenu.image_url) {
+				deleteFromGDrive(newMenu.image_url);
+			}
+
+			const result = await uploadToGDrive(file, {
+				folder: 'menus',
+				filename: `menu_${Date.now()}_${file.name}`,
+				compress: true,
+				maxWidth: 1200,
+				quality: 0.85
+			});
+
+			if (result.status === 'success' && (result.directUrl || result.fileUrl)) {
+				newMenu.image_url = result.directUrl || result.fileUrl || '';
+			} else {
+				alert(result.message || 'Gagal mengunggah gambar ke Google Drive.');
+			}
+		} catch (err: any) {
+			console.error('Upload error', err);
+			alert('Terjadi kesalahan saat upload gambar: ' + (err?.message || err));
+		} finally {
+			uploadingMenuImage = false;
+		}
+	}
+
+	function handleRemoveMenuImage() {
+		if (newMenu.image_url) {
+			deleteFromGDrive(newMenu.image_url);
+			newMenu.image_url = '';
+		}
+	}
+
+	function handleCancelAddMenu() {
+		if (newMenu.image_url) {
+			deleteFromGDrive(newMenu.image_url);
+		}
+		newMenu = {
+			name: '',
+			category_id: categories.length > 0 ? categories[0].id : '',
+			price: 25000,
+			description: '',
+			image_url: '',
+			available: true
+		};
+		showAddMenu = false;
+	}
 
 	async function loadData() {
 		try {
@@ -96,6 +158,16 @@
 	async function handleDeleteMenu(id: string) {
 		if (!confirm('Hapus menu ini?')) return;
 		try {
+			// Jika menu memiliki gambar (terutama dari Google Drive), hapus file gambar di GDrive terlebih dahulu
+			const targetMenu = menus.find((m) => m.id === id);
+			if (targetMenu?.image_url) {
+				try {
+					await deleteFromGDrive(targetMenu.image_url);
+				} catch (err) {
+					console.warn('Gagal menghapus foto dari Google Drive:', err);
+				}
+			}
+
 			await api.delete(`/menus/${id}`);
 			await loadData();
 		} catch (e) {
@@ -228,27 +300,75 @@
 					</div>
 
 					<div>
-						<label for="menu-image" class="block font-bold text-slate-700 mb-1">URL Gambar (Unsplash / CDN)</label>
-						<input
-							id="menu-image"
-							type="url"
-							bind:value={newMenu.image_url}
-							placeholder="https://images.unsplash.com/..."
-							class="w-full p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-orange-500"
-						/>
+						<label for="menu-image" class="block font-bold text-slate-700 mb-1">Foto Menu</label>
+						<div class="space-y-2">
+							<div class="flex items-center gap-2">
+								<label 
+									class="flex-1 cursor-pointer border-2 border-dashed border-slate-300 hover:border-orange-500 rounded-xl p-3 flex items-center justify-center gap-2 text-xs font-bold text-slate-600 hover:text-orange-600 bg-slate-50 hover:bg-orange-50/50 transition-colors {uploadingMenuImage ? 'opacity-50 pointer-events-none' : ''}"
+								>
+									{#if uploadingMenuImage}
+										<Loader2 class="w-4 h-4 animate-spin text-orange-600" />
+										<span>Mengunggah ke GDrive Bucket...</span>
+									{:else}
+										<Upload class="w-4 h-4 text-orange-600" />
+										<span>Upload Foto ke Google Drive</span>
+									{/if}
+									<input 
+										type="file" 
+										accept="image/*" 
+										onchange={handleMenuImageUpload} 
+										class="hidden" 
+										disabled={uploadingMenuImage}
+									/>
+								</label>
+							</div>
+
+							{#if newMenu.image_url}
+								<div class="relative rounded-xl border border-slate-200 overflow-hidden bg-slate-50 p-2 flex items-center gap-3">
+									<img 
+										src={newMenu.image_url} 
+										alt="Preview Menu" 
+										class="w-14 h-14 rounded-lg object-cover border border-slate-200"
+									/>
+									<div class="flex-1 min-w-0">
+										<p class="text-xs font-semibold text-slate-800 truncate">Gambar Tersimpan di GDrive</p>
+										<p class="text-[11px] text-slate-400 truncate">{newMenu.image_url}</p>
+									</div>
+									<button 
+										type="button" 
+										onclick={handleRemoveMenuImage}
+										class="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 cursor-pointer"
+										title="Hapus gambar dari GDrive"
+									>
+										<X class="w-4 h-4" />
+									</button>
+								</div>
+							{/if}
+
+							<div>
+								<span class="text-[10px] text-slate-400 font-medium">Atau masukkan URL langsung:</span>
+								<input
+									id="menu-image"
+									type="url"
+									bind:value={newMenu.image_url}
+									placeholder="https://images.unsplash.com/..."
+									class="w-full mt-1 p-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:border-orange-500"
+								/>
+							</div>
+						</div>
 					</div>
 
 					<div class="flex justify-end gap-2 pt-3 border-t border-slate-100">
 						<button
 							type="button"
-							onclick={() => (showAddMenu = false)}
-							class="px-4 py-2 font-semibold text-slate-600 rounded-xl hover:bg-slate-100"
+							onclick={handleCancelAddMenu}
+							class="px-4 py-2 font-semibold text-slate-600 rounded-xl hover:bg-slate-100 cursor-pointer"
 						>
 							Batal
 						</button>
 						<button
 							type="submit"
-							class="px-5 py-2 font-bold bg-orange-600 text-white rounded-xl shadow-md"
+							class="px-5 py-2 font-bold bg-orange-600 text-white rounded-xl shadow-md cursor-pointer"
 						>
 							Tambah Menu
 						</button>
