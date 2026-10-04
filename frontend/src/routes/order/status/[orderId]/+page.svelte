@@ -7,7 +7,8 @@
 	import { 
 		Clock, CheckCircle2, ChefHat, BellRing, Sparkles, 
 		QrCode, ArrowLeft, RefreshCw, AlertCircle, Check,
-		Receipt, Printer, Store, X, Eye, Wallet
+		Receipt, Printer, Store, X, Eye, Wallet,
+		Upload, Camera, Trash2, Image as ImageIcon
 	} from '@lucide/svelte';
 
 	const orderId = page.params.orderId;
@@ -19,6 +20,14 @@
 	let showInvoiceModal = $state(false);
 	let invoiceAutoShown = $state(false);
 	let selectedMethod = $state<'QRIS' | 'CASH'>('QRIS');
+
+	// Proof of Payment State
+	let proofImage = $state<string | null>(null);
+	let proofFileName = $state<string>('');
+	let proofFileSize = $state<string>('');
+	let proofUploadedAt = $state<string>('');
+	let isUploadingProof = $state(false);
+	let showProofModal = $state(false);
 
 	const isPaid = $derived(!!(order && order.status !== 'WAITING_PAYMENT' && order.status !== 'CANCELLED'));
 
@@ -152,9 +161,60 @@
 
 
 
+	function handleFileUpload(e: Event) {
+		const target = e.target as HTMLInputElement;
+		if (!target.files || target.files.length === 0) return;
+		const file = target.files[0];
+		if (!file.type.startsWith('image/')) {
+			alert('Mohon pilih file gambar (JPG, PNG, WEBP, HEIC, GIF, dll).');
+			return;
+		}
+
+		isUploadingProof = true;
+		const reader = new FileReader();
+		reader.onload = () => {
+			const base64 = reader.result as string;
+			proofImage = base64;
+			proofFileName = file.name;
+			proofFileSize = (file.size / 1024).toFixed(1) + ' KB';
+			proofUploadedAt = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+			isUploadingProof = false;
+
+			try {
+				localStorage.setItem(`payment_proof_${orderId}`, JSON.stringify({
+					image: base64,
+					fileName: file.name,
+					fileSize: proofFileSize,
+					uploadedAt: proofUploadedAt
+				}));
+			} catch (_) {}
+		};
+		reader.readAsDataURL(file);
+	}
+
+	function removeProof() {
+		proofImage = null;
+		proofFileName = '';
+		proofFileSize = '';
+		proofUploadedAt = '';
+		try {
+			localStorage.removeItem(`payment_proof_${orderId}`);
+		} catch (_) {}
+	}
+
 	onMount(() => {
 		loadOrder();
 		connectWebSocket();
+		try {
+			const saved = localStorage.getItem(`payment_proof_${orderId}`);
+			if (saved) {
+				const d = JSON.parse(saved);
+				proofImage = d.image;
+				proofFileName = d.fileName;
+				proofFileSize = d.fileSize;
+				proofUploadedAt = d.uploadedAt;
+			}
+		} catch (_) {}
 	});
 
 	onDestroy(() => {
@@ -270,7 +330,117 @@
 								Buka aplikasi e-wallet (GoPay, OVO, ShopeePay, DANA) atau mobile banking untuk memindai QRIS di atas.
 							</p>
 
+							<!-- Placeholder Upload Bukti Pembayaran Foto (Hanya untuk QRIS / Cashless) -->
+							<div class="mt-4 pt-4 border-t border-slate-200/80 text-left">
+								<div class="flex items-center justify-between mb-2.5">
+									<div>
+										<h4 class="text-xs font-black text-slate-900 tracking-tight flex items-center gap-1.5">
+											<Camera class="w-4 h-4 text-orange-600" />
+											<span>Upload Bukti Pembayaran (Foto)</span>
+										</h4>
+										<p class="text-[11px] text-slate-500">
+											Unggah bukti transfer atau tangkapan layar pembayaran QRIS
+										</p>
+									</div>
+									{#if proofImage}
+										<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+											<span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+											Menunggu Verifikasi Admin
+										</span>
+									{/if}
+								</div>
 
+								{#if !proofImage}
+									<!-- Dropzone Upload Placeholder -->
+									<label class="group relative flex flex-col items-center justify-center p-5 sm:p-6 border-2 border-dashed border-slate-300 hover:border-orange-500 bg-slate-50/80 hover:bg-orange-50/20 rounded-2xl cursor-pointer transition-all duration-200 text-center">
+										<input 
+											type="file" 
+											accept="image/*" 
+											onchange={handleFileUpload} 
+											class="sr-only" 
+										/>
+										<div class="w-12 h-12 rounded-2xl bg-white shadow-xs border border-slate-200 flex items-center justify-center text-slate-500 group-hover:text-orange-600 group-hover:scale-105 group-hover:border-orange-200 transition-all mb-2.5">
+											{#if isUploadingProof}
+												<RefreshCw class="w-5 h-5 animate-spin text-orange-600" />
+											{:else}
+												<Upload class="w-5 h-5" />
+											{/if}
+										</div>
+										<span class="text-xs font-bold text-slate-800 group-hover:text-orange-600 transition-colors">
+											{isUploadingProof ? 'Memproses Foto...' : 'Pilih atau Seret Foto Bukti Pembayaran'}
+										</span>
+										<span class="text-[10px] sm:text-[11px] text-slate-400 mt-1 max-w-xs">
+											Mendukung semua format foto (JPG, PNG, WEBP, HEIC, GIF, dll)
+										</span>
+									</label>
+								{:else}
+									<!-- Uploaded Proof Card Preview -->
+									<div class="bg-white border border-slate-200 rounded-2xl p-3 shadow-xs space-y-3">
+										<div class="flex items-center gap-3">
+											<button 
+												type="button" 
+												onclick={() => (showProofModal = true)}
+												class="relative w-16 h-16 rounded-xl overflow-hidden bg-slate-100 border border-slate-200 group shrink-0"
+												title="Klik untuk memperbesar foto"
+											>
+												<img 
+													src={proofImage} 
+													alt="Bukti Pembayaran" 
+													class="w-full h-full object-cover transition-transform group-hover:scale-110" 
+												/>
+												<div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white">
+													<Eye class="w-4 h-4" />
+												</div>
+											</button>
+
+											<div class="min-w-0 flex-1">
+												<p class="text-xs font-bold text-slate-900 truncate" title={proofFileName}>
+													{proofFileName || 'bukti-pembayaran.jpg'}
+												</p>
+												<p class="text-[11px] text-slate-400 font-medium">
+													{proofFileSize} &bull; Diunggah {proofUploadedAt || 'Baru saja'}
+												</p>
+												<div class="mt-1.5 flex items-center gap-2">
+													<button
+														type="button"
+														onclick={() => (showProofModal = true)}
+														class="text-[11px] font-bold text-orange-600 hover:text-orange-700 flex items-center gap-1 cursor-pointer"
+													>
+														<Eye class="w-3.5 h-3.5" />
+														Lihat Foto
+													</button>
+													<span class="text-slate-200">&bull;</span>
+													<label class="text-[11px] font-bold text-slate-600 hover:text-slate-900 cursor-pointer">
+														<span>Ganti Foto</span>
+														<input 
+															type="file" 
+															accept="image/*" 
+															onchange={handleFileUpload} 
+															class="sr-only" 
+														/>
+													</label>
+													<span class="text-slate-200">&bull;</span>
+													<button
+														type="button"
+														onclick={removeProof}
+														class="text-[11px] font-bold text-rose-600 hover:text-rose-700 flex items-center gap-0.5 cursor-pointer"
+													>
+														<Trash2 class="w-3 h-3" />
+														Hapus
+													</button>
+												</div>
+											</div>
+										</div>
+
+										<div class="bg-amber-50/80 border border-amber-200/70 rounded-xl p-2.5 flex items-start gap-2">
+											<AlertCircle class="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
+											<p class="text-[11px] text-amber-800 leading-tight">
+												Setelah status dikonfirmasi oleh admin/kasir, pembayaran otomatis <strong>selesai</strong> dan pesanan langsung masuk ke antrian dapur.
+											</p>
+										</div>
+									</div>
+								{/if}
+							</div>
 						</div>
 					{:else}
 						<!-- Cash / Tunai View -->
@@ -472,6 +642,25 @@
 							<span>Cetak</span>
 						</button>
 					</div>
+
+					{#if proofImage}
+						<div class="pt-3 border-t border-slate-100 flex items-center justify-between">
+							<div class="flex items-center gap-2.5 min-w-0">
+								<img src={proofImage} alt="Bukti Foto" class="w-9 h-9 rounded-lg object-cover border border-slate-200 shrink-0" />
+								<div class="text-[11px] text-left truncate">
+									<span class="font-bold text-slate-800 block truncate">Bukti Pembayaran Terlampir</span>
+									<span class="text-slate-400 text-[10px] block truncate">{proofFileName || 'foto-bukti'} &bull; {proofFileSize}</span>
+								</div>
+							</div>
+							<button
+								type="button"
+								onclick={() => (showProofModal = true)}
+								class="text-xs font-bold text-emerald-700 hover:text-emerald-800 shrink-0 ml-2"
+							>
+								Lihat Foto
+							</button>
+						</div>
+					{/if}
 				</div>
 			{/if}
 
@@ -667,7 +856,7 @@
 					<div class="text-right">
 						{#if isPaid}
 							<span class="text-[10px] text-slate-400 uppercase font-bold block">Ref ID Transaksi</span>
-							<span class="font-mono text-[11px] text-slate-600 truncate max-w-[140px] inline-block">{payment?.provider_transaction_id || payment?.id || '-'}</span>
+							<span class="font-mono text-[11px] text-slate-600 truncate max-w-35 inline-block">{payment?.provider_transaction_id || payment?.id || '-'}</span>
 						{:else}
 							<span class="text-[10px] text-slate-400 uppercase font-bold block">Status Tagihan</span>
 							<span class="text-amber-700 font-bold text-[11px] uppercase">Menunggu Kasir</span>
@@ -774,6 +963,53 @@
 					type="button"
 					onclick={() => (showInvoiceModal = false)}
 					class="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs hover:bg-slate-100 transition-colors"
+				>
+					Tutup
+				</button>
+			</div>
+		</div>
+	</div>
+{/if}
+
+<!-- Modal Preview Foto Bukti Pembayaran -->
+{#if showProofModal && proofImage}
+	<div class="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4">
+		<div class="bg-white rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl animate-in zoom-in-95 duration-150 flex flex-col max-h-[90vh]">
+			<div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+				<div class="flex items-center gap-2">
+					<div class="w-8 h-8 rounded-xl bg-orange-50 border border-orange-200 flex items-center justify-center text-orange-600">
+						<ImageIcon class="w-4 h-4" />
+					</div>
+					<div>
+						<h3 class="text-xs font-black text-slate-900 truncate max-w-xs">{proofFileName || 'Bukti Pembayaran'}</h3>
+						<p class="text-[10px] text-slate-400 font-medium">{proofFileSize} &bull; {proofUploadedAt || 'Baru saja'}</p>
+					</div>
+				</div>
+				<button
+					type="button"
+					onclick={() => (showProofModal = false)}
+					class="w-8 h-8 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 flex items-center justify-center"
+				>
+					<X class="w-4 h-4" />
+				</button>
+			</div>
+
+			<div class="p-4 bg-slate-950 flex items-center justify-center flex-1 overflow-auto">
+				<img 
+					src={proofImage} 
+					alt="Bukti Pembayaran Penuh" 
+					class="max-w-full max-h-[65vh] object-contain rounded-lg shadow-md"
+				/>
+			</div>
+
+			<div class="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
+				<span class="text-[11px] text-slate-500 font-medium">
+					{isPaid ? 'Status: Pembayaran Sudah Lunas' : 'Status: Menunggu Konfirmasi Admin / Kasir'}
+				</span>
+				<button
+					type="button"
+					onclick={() => (showProofModal = false)}
+					class="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl transition-colors"
 				>
 					Tutup
 				</button>
