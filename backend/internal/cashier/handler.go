@@ -144,10 +144,22 @@ func (h *Handler) UpdateRegister(c *gin.Context) {
 func (h *Handler) DeleteRegister(c *gin.Context) {
 	id := c.Param("id")
 	if err := h.service.DeleteRegister(c.Request.Context(), id); err != nil {
+		if errors.Is(err, ErrRegisterNotFound) {
+			response.NotFound(c, "REGISTER_NOT_FOUND", "Mesin kasir tidak ditemukan")
+			return
+		}
+		if errors.Is(err, ErrRegisterHasActiveShift) {
+			response.BadRequest(c, "REGISTER_HAS_ACTIVE_SHIFT", "Mesin kasir sedang digunakan dalam shift kasir aktif. Harap tutup shift terlebih dahulu.")
+			return
+		}
+		if errors.Is(err, ErrRegisterHasShiftHistory) {
+			response.BadRequest(c, "REGISTER_HAS_HISTORY", "Mesin kasir memiliki riwayat shift/transaksi sehingga tidak dapat dihapus permanen demi keamanan data audit.")
+			return
+		}
 		response.InternalServerError(c, "DELETE_REGISTER_FAILED", err.Error())
 		return
 	}
-	response.OK(c, gin.H{"deleted": true}, "Register deleted successfully")
+	response.OK(c, gin.H{"deleted": true}, "Register berhasil dihapus")
 }
 
 // ----------------- SHIFTS HANDLERS -----------------

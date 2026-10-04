@@ -286,10 +286,10 @@ func (r *repository) UpdateStatus(ctx context.Context, id string, newStatus Stat
 	now := time.Now()
 	_, err = tx.Exec(ctx, `
 		UPDATE orders
-		SET status = $1,
+		SET status = $1::varchar,
 		    updated_at = $2,
-		    completed_at = CASE WHEN $1 = 'COMPLETED' THEN $2 ELSE completed_at END,
-		    cancelled_at = CASE WHEN $1 = 'CANCELLED' THEN $2 ELSE cancelled_at END
+		    completed_at = CASE WHEN $1::varchar = 'COMPLETED' THEN $2 ELSE completed_at END,
+		    cancelled_at = CASE WHEN $1::varchar = 'CANCELLED' THEN $2 ELSE cancelled_at END
 		WHERE id = $3
 	`, newStatus, now, id)
 	if err != nil {

@@ -69,13 +69,33 @@
 		}
 	}
 
-	async function handleDelete(id: string) {
-		if (!confirm('Hapus mesin kasir ini? Pastikan tidak ada shift yang sedang berjalan.')) return;
+	async function handleDelete(reg: Register) {
+		if (!confirm(`Hapus mesin kasir "${reg.name}"? Pastikan tidak ada shift yang sedang berjalan.`)) return;
 		try {
-			await api.delete(`/registers/${id}`);
+			await api.delete(`/registers/${reg.id}`);
 			await loadRegisters();
 		} catch (e: any) {
-			alert(e?.message || 'Gagal menghapus register');
+			if (e?.code === 'REGISTER_HAS_HISTORY') {
+				if (reg.status === 'INACTIVE') {
+					alert(
+						'Mesin kasir ini memiliki riwayat shift/transaksi sehingga tidak dapat dihapus permanen demi keamanan data audit. Status mesin kasir saat ini sudah Nonaktif.'
+					);
+				} else {
+					const deactivate = confirm(
+						`${e.message}\n\nApakah Anda ingin mengubah status mesin kasir ini menjadi "Nonaktif"?`
+					);
+					if (deactivate) {
+						try {
+							await api.patch(`/registers/${reg.id}`, { status: 'INACTIVE' });
+							await loadRegisters();
+						} catch (patchErr: any) {
+							alert(patchErr?.message || 'Gagal menonaktifkan mesin kasir');
+						}
+					}
+				}
+			} else {
+				alert(e?.message || 'Gagal memproses penghapusan register');
+			}
 		}
 	}
 
@@ -165,7 +185,7 @@
 								</button>
 								<button
 									type="button"
-									onclick={() => handleDelete(reg.id)}
+									onclick={() => handleDelete(reg)}
 									class="p-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 transition-colors"
 									title="Hapus Register"
 								>
@@ -226,7 +246,7 @@
 									</button>
 									<button
 										type="button"
-										onclick={() => handleDelete(reg.id)}
+										onclick={() => handleDelete(reg)}
 										class="p-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 transition-colors"
 										title="Hapus Register"
 									>

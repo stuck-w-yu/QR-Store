@@ -49,6 +49,10 @@ func (h *Handler) AcceptOrder(c *gin.Context) {
 
 	if err := h.orderService.UpdateOrderStatus(c.Request.Context(), id, order.StatusPreparing, string(userRole.(auth.Role))); err != nil {
 		if errors.Is(err, order.ErrInvalidStatusOrder) {
+			if o, getErr := h.orderService.GetOrderByID(c.Request.Context(), id); getErr == nil && o != nil && o.Status == order.StatusPreparing {
+				response.OK(c, gin.H{"status": order.StatusPreparing}, "Order is already in preparing state")
+				return
+			}
 			response.Conflict(c, "INVALID_STATE", "Order is not in CONFIRMED state")
 			return
 		}
@@ -64,6 +68,10 @@ func (h *Handler) MarkReady(c *gin.Context) {
 
 	if err := h.orderService.UpdateOrderStatus(c.Request.Context(), id, order.StatusReady, string(userRole.(auth.Role))); err != nil {
 		if errors.Is(err, order.ErrInvalidStatusOrder) {
+			if o, getErr := h.orderService.GetOrderByID(c.Request.Context(), id); getErr == nil && o != nil && o.Status == order.StatusReady {
+				response.OK(c, gin.H{"status": order.StatusReady}, "Order is already ready")
+				return
+			}
 			response.Conflict(c, "INVALID_STATE", "Order is not in PREPARING state")
 			return
 		}
@@ -79,6 +87,10 @@ func (h *Handler) ServeOrder(c *gin.Context) {
 
 	if err := h.orderService.UpdateOrderStatus(c.Request.Context(), id, order.StatusServed, string(userRole.(auth.Role))); err != nil {
 		if errors.Is(err, order.ErrInvalidStatusOrder) {
+			if o, getErr := h.orderService.GetOrderByID(c.Request.Context(), id); getErr == nil && o != nil && o.Status == order.StatusServed {
+				response.OK(c, gin.H{"status": order.StatusServed}, "Order is already served")
+				return
+			}
 			response.Conflict(c, "INVALID_STATE", "Order is not in READY state")
 			return
 		}
@@ -94,6 +106,10 @@ func (h *Handler) CompleteOrder(c *gin.Context) {
 
 	if err := h.orderService.UpdateOrderStatus(c.Request.Context(), id, order.StatusCompleted, string(userRole.(auth.Role))); err != nil {
 		if errors.Is(err, order.ErrInvalidStatusOrder) {
+			if o, getErr := h.orderService.GetOrderByID(c.Request.Context(), id); getErr == nil && o != nil && o.Status == order.StatusCompleted {
+				response.OK(c, gin.H{"status": order.StatusCompleted}, "Order is already completed")
+				return
+			}
 			response.Conflict(c, "INVALID_STATE", "Order is not in READY or SERVED state")
 			return
 		}

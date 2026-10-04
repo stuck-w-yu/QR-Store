@@ -12,13 +12,15 @@ import (
 )
 
 var (
-	ErrRegisterNotFound       = errors.New("register not found")
-	ErrShiftNotFound          = errors.New("cashier shift not found")
-	ErrActiveShiftExists      = errors.New("an active shift already exists for this register or cashier")
-	ErrShiftAlreadyClosed     = errors.New("shift is already closed")
-	ErrInvalidShiftStatus     = errors.New("invalid shift status transition")
-	ErrRefundNotFound         = errors.New("refund not found")
-	ErrPendingPaymentsBlocked = errors.New("closing blocked: pending payments exist")
+	ErrRegisterNotFound        = errors.New("register not found")
+	ErrRegisterHasActiveShift  = errors.New("cannot delete register: active cashier shift is currently open")
+	ErrRegisterHasShiftHistory = errors.New("cannot delete register: register has cashier shift history")
+	ErrShiftNotFound           = errors.New("cashier shift not found")
+	ErrActiveShiftExists       = errors.New("an active shift already exists for this register or cashier")
+	ErrShiftAlreadyClosed      = errors.New("shift is already closed")
+	ErrInvalidShiftStatus      = errors.New("invalid shift status transition")
+	ErrRefundNotFound          = errors.New("refund not found")
+	ErrPendingPaymentsBlocked  = errors.New("closing blocked: pending payments exist")
 )
 
 type ShiftFilter struct {
@@ -144,8 +146,35 @@ func (r *repository) UpdateRegister(ctx context.Context, reg *Register) error {
 }
 
 func (r *repository) DeleteRegister(ctx context.Context, id string) error {
+	var exists bool
+	err := r.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM registers WHERE id = $1)`, id).Scan(&exists)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return ErrRegisterNotFound
+	}
+
+	var hasActiveShift bool
+	err = r.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM cashier_shifts WHERE register_id = $1 AND status = 'OPEN')`, id).Scan(&hasActiveShift)
+	if err != nil {
+		return err
+	}
+	if hasActiveShift {
+		return ErrRegisterHasActiveShift
+	}
+
+	var hasHistory bool
+	err = r.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM cashier_shifts WHERE register_id = $1)`, id).Scan(&hasHistory)
+	if err != nil {
+		return err
+	}
+	if hasHistory {
+		return ErrRegisterHasShiftHistory
+	}
+
 	query := `DELETE FROM registers WHERE id = $1`
-	_, err := r.pool.Exec(ctx, query, id)
+	_, err = r.pool.Exec(ctx, query, id)
 	return err
 }
 

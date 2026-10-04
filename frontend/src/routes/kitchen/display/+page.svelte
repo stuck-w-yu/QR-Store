@@ -12,7 +12,9 @@
 	let orders = $state<Order[]>([]);
 	let loading = $state(true);
 	let soundEnabled = $state(true);
+	let wsConnected = $state(false);
 	let ws: WebSocket | null = null;
+	let pollInterval: any = null;
 
 	// Audio notification using Web Audio API synthesizer
 	function playChime() {
@@ -60,13 +62,37 @@
 
 		const wsURL = import.meta.env.VITE_WS_URL || 'ws://localhost:8080/ws';
 		try {
+			if (ws) {
+				try { ws.close(); } catch (_) {}
+			}
 			ws = new WebSocket(`${wsURL}?channel=${channel}`);
+
+			ws.onopen = () => {
+				wsConnected = true;
+			};
 
 			ws.onmessage = (event) => {
 				try {
 					const msg = JSON.parse(event.data);
-					if (msg.event === 'NEW_ORDER_CONFIRMED' || msg.event === 'ORDER_STATUS_CHANGED') {
+					const relevantEvents = [
+						'NEW_ORDER_CONFIRMED',
+						'ORDER_STATUS_CHANGED',
+						'kitchen.new_order',
+						'ORDER_CONFIRMED',
+						'order.confirmed'
+					];
+					if (relevantEvents.includes(msg.event)) {
 						playChime();
+						// Optimistically update or insert order in state if provided in payload
+						if (msg.data?.order) {
+							const updated = msg.data.order as Order;
+							const idx = orders.findIndex((o) => o.id === updated.id);
+							if (idx !== -1) {
+								orders[idx] = { ...orders[idx], ...updated };
+							} else {
+								orders = [updated, ...orders];
+							}
+						}
 						loadOrders();
 					}
 				} catch (e) {
@@ -74,38 +100,60 @@
 				}
 			};
 
+			ws.onerror = () => {
+				wsConnected = false;
+			};
+
 			ws.onclose = () => {
+				wsConnected = false;
 				setTimeout(() => {
-					if (ws && ws.readyState === WebSocket.CLOSED) {
+					if (typeof window !== 'undefined' && (!ws || ws.readyState === WebSocket.CLOSED)) {
 						connectWebSocket();
 					}
 				}, 3000);
 			};
 		} catch (e) {
+			wsConnected = false;
 			console.error('Failed to connect WebSocket in kitchen', e);
 		}
 	}
 
 	async function handleAccept(orderId: string) {
-		await api.post(`/kitchen/orders/${orderId}/accept`);
-		await loadOrders();
+		try {
+			orders = orders.map((o) =>
+				o.id === orderId ? { ...o, status: 'PREPARING', updated_at: new Date().toISOString() } : o
+			);
+			await api.post(`/kitchen/orders/${orderId}/accept`);
+		} catch (e: any) {
+			console.warn('Accept order note:', e);
+		} finally {
+			await loadOrders();
+		}
 	}
 
 	async function handleReady(orderId: string) {
-		await api.post(`/kitchen/orders/${orderId}/ready`);
-		await loadOrders();
+		try {
+			orders = orders.map((o) =>
+				o.id === orderId ? { ...o, status: 'READY', updated_at: new Date().toISOString() } : o
+			);
+			await api.post(`/kitchen/orders/${orderId}/ready`);
+		} catch (e: any) {
+			console.warn('Mark ready note:', e);
+		} finally {
+			await loadOrders();
+		}
 	}
 
 	async function handleComplete(orderId: string) {
 		try {
-			await api.post(`/kitchen/orders/${orderId}/complete`);
-			// Optimistically update order status to COMPLETED
 			orders = orders.map((o) =>
 				o.id === orderId ? { ...o, status: 'COMPLETED', updated_at: new Date().toISOString() } : o
 			);
+			await api.post(`/kitchen/orders/${orderId}/complete`);
+		} catch (e: any) {
+			console.warn('Complete order note:', e);
+		} finally {
 			await loadOrders();
-		} catch (e) {
-			console.error('Failed to complete order', e);
 		}
 	}
 
@@ -132,10 +180,12 @@
 
 		await loadOrders();
 		connectWebSocket();
+		pollInterval = setInterval(loadOrders, 5000);
 	});
 
 	onDestroy(() => {
 		if (ws) ws.close();
+		if (pollInterval) clearInterval(pollInterval);
 	});
 </script>
 
@@ -155,6 +205,10 @@
 					<span>{completedOrders.length} Selesai Diantar</span>
 				</div>
 			{/if}
+			<div class="flex items-center gap-1.5 px-3 py-1 {wsConnected ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/25' : 'bg-amber-500/15 text-amber-400 border-amber-500/25'} font-bold rounded-lg text-xs border">
+				<span class="w-2 h-2 rounded-full {wsConnected ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400 animate-ping'}"></span>
+				<span>{wsConnected ? 'Realtime Live' : 'Menghubungkan WS...'}</span>
+			</div>
 		</div>
 
 		<div class="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
