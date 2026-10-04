@@ -4,7 +4,7 @@
 	import { auth } from '$lib/stores/auth.svelte';
 	import { 
 		DollarSign, ShoppingCart, TrendingUp, CheckCircle, 
-		XCircle, QrCode, Utensils, RefreshCw, ChefHat 
+		XCircle, QrCode, Utensils, RefreshCw, ChefHat, Wallet
 	} from '@lucide/svelte';
 
 	let loading = $state(true);
@@ -139,7 +139,18 @@
 	</div>
 
 	<!-- Quick Action Shortcuts -->
-	<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+	<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+		<a
+			href="/admin/payments"
+			class="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-xs hover:border-emerald-500 hover:shadow-md transition-all group"
+		>
+			<div class="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mb-4 group-hover:scale-105 transition-transform">
+				<Wallet class="w-6 h-6" />
+			</div>
+			<h3 class="font-bold text-slate-900 text-base mb-1">Konfirmasi Tunai</h3>
+			<p class="text-xs text-slate-500">Terima dan verifikasi pembayaran tunai meja pelanggan secara instan.</p>
+		</a>
+
 		<a
 			href="/admin/orders"
 			class="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-xs hover:border-orange-500 hover:shadow-md transition-all group"

@@ -6,7 +6,7 @@
 	import { 
 		LayoutDashboard, ShoppingCart, Utensils, QrCode, 
 		Users, ChefHat, LogOut, Store, ExternalLink, Menu as MenuIcon, X,
-		CreditCard, Monitor, ClipboardList, ShieldCheck
+		CreditCard, Monitor, ClipboardList, ShieldCheck, Wallet
 	} from '@lucide/svelte';
 
 	let { children } = $props();
@@ -14,6 +14,7 @@
 
 	const navItems = [
 		{ href: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+		{ href: '/admin/payments', label: 'Konfirmasi Kasir & Tunai', icon: Wallet, roles: ['SUPERADMIN', 'OWNER', 'ADMIN', 'CASHIER'] },
 		{ href: '/admin/cashier', label: 'Kasir POS', icon: CreditCard, roles: ['SUPERADMIN', 'OWNER', 'ADMIN', 'CASHIER'] },
 		{ href: '/admin/orders', label: 'Pesanan Masuk', icon: ShoppingCart, roles: ['SUPERADMIN', 'OWNER', 'ADMIN', 'CASHIER'] },
 		{ href: '/admin/menus', label: 'Menu & Kategori', icon: Utensils, roles: ['SUPERADMIN', 'OWNER', 'ADMIN'] },

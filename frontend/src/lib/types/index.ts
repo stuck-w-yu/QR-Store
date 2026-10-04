@@ -190,6 +190,8 @@ export interface Order {
 	table_name?: string;
 	order_number: string;
 	status: OrderStatus;
+	payment_status?: string;
+	payment_method?: string;
 	subtotal: number;
 	tax: number;
 	service_charge: number;
