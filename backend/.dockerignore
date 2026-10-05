@@ -1,0 +1,40 @@
+# Version control
+.git
+.gitignore
+
+# Environment files & secrets
+.env
+.env.*
+*.env
+
+# Local build artifacts & binaries
+server
+bin/
+tmp/
+*.exe
+*.test
+*.out
+__debug_bin
+
+# Vendor directory (if any)
+vendor/
+
+# Test files and coverage
+*_test.go
+coverage.out
+coverage.html
+
+# IDE & editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Documentation & Docker
+README.md
+Dockerfile
+.dockerignore

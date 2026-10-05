@@ -33,7 +33,10 @@ Thumbs.db
 # Docker
 *.log
 
-PRD
+# Documentation & Specifications
+PRD/
+prd/
 ClerkFeat.md
 prd.md
 gas/
+
