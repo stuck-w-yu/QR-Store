@@ -71,6 +71,7 @@ type Order struct {
 	Discount       int64         `json:"discount"`
 	Total          int64         `json:"total"`
 	Notes          *string       `json:"notes"`
+	ProofURL       *string       `json:"proof_url,omitempty"`
 	Items          []OrderItem   `json:"items,omitempty"`
 	CreatedAt      time.Time     `json:"created_at"`
 	UpdatedAt      time.Time     `json:"updated_at"`

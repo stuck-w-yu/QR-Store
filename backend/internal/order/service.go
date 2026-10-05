@@ -40,6 +40,7 @@ type Service interface {
 	ListOrders(ctx context.Context, restaurantID string, status *Status) ([]Order, error)
 	ListKitchenOrders(ctx context.Context, restaurantID string) ([]Order, error)
 	UpdateOrderStatus(ctx context.Context, id string, newStatus Status, changedBy string) error
+	SubmitProofOfPayment(ctx context.Context, orderID string, proofURL string) (*Order, error)
 	GetTodayAnalytics(ctx context.Context, restaurantID string) (map[string]interface{}, error)
 }
 
@@ -236,6 +237,30 @@ func (s *service) UpdateOrderStatus(ctx context.Context, id string, newStatus St
 	}
 
 	return nil
+}
+
+func (s *service) SubmitProofOfPayment(ctx context.Context, orderID string, proofURL string) (*Order, error) {
+	if err := s.orderRepo.UpdateProofURL(ctx, orderID, proofURL); err != nil {
+		return nil, err
+	}
+
+	o, err := s.orderRepo.GetByID(ctx, orderID)
+	if err != nil {
+		return nil, err
+	}
+
+	if s.hub != nil {
+		// Broadcast to cashier and customer rooms
+		eventData := map[string]interface{}{
+			"order_id":  o.ID,
+			"order":     o,
+			"proof_url": proofURL,
+		}
+		s.hub.Publish(fmt.Sprintf("restaurant:%s:cashier", o.RestaurantID), "PAYMENT_PROOF_SUBMITTED", eventData)
+		s.hub.Publish(fmt.Sprintf("order:%s", o.ID), "PAYMENT_PROOF_SUBMITTED", eventData)
+	}
+
+	return o, nil
 }
 
 func (s *service) GetTodayAnalytics(ctx context.Context, restaurantID string) (map[string]interface{}, error) {

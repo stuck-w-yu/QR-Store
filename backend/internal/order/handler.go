@@ -12,6 +12,10 @@ type UpdateStatusRequest struct {
 	Status Status `json:"status" binding:"required"`
 }
 
+type SubmitProofRequest struct {
+	ProofURL string `json:"proof_url" binding:"required"`
+}
+
 type Handler struct {
 	service     Service
 	authService auth.Service
@@ -26,6 +30,7 @@ func (h *Handler) RegisterRoutes(r *gin.RouterGroup) {
 	r.POST("/public/orders", h.CreatePublicOrder)
 	r.GET("/public/orders/:id", h.GetPublicOrder)
 	r.GET("/public/orders/:id/status", h.GetPublicOrderStatus)
+	r.POST("/public/orders/:id/proof", h.SubmitProof)
 
 	// Staff routes
 	orderGroup := r.Group("/orders", auth.AuthMiddleware(h.authService))
@@ -175,4 +180,25 @@ func (h *Handler) GetTodayAnalytics(c *gin.Context) {
 		return
 	}
 	response.OK(c, stats, "Today's analytics retrieved successfully")
+}
+
+func (h *Handler) SubmitProof(c *gin.Context) {
+	id := c.Param("id")
+	var req SubmitProofRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "INVALID_REQUEST", err.Error())
+		return
+	}
+
+	o, err := h.service.SubmitProofOfPayment(c.Request.Context(), id, req.ProofURL)
+	if err != nil {
+		if errors.Is(err, ErrOrderNotFound) {
+			response.NotFound(c, "ORDER_NOT_FOUND", "Order not found")
+			return
+		}
+		response.InternalServerError(c, "SUBMIT_PROOF_FAILED", err.Error())
+		return
+	}
+
+	response.OK(c, o, "Proof of payment submitted successfully")
 }

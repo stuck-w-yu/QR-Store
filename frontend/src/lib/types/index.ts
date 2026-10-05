@@ -198,6 +198,7 @@ export interface Order {
 	discount: number;
 	total: number;
 	notes?: string;
+	proof_url?: string;
 	items?: OrderItem[];
 	created_at: string;
 	updated_at: string;
@@ -214,6 +215,7 @@ export interface Payment {
 	status: 'PENDING' | 'PAID' | 'FAILED' | 'EXPIRED' | 'CANCELLED';
 	payment_url?: string;
 	qr_string?: string;
+	proof_url?: string;
 	expired_at?: string;
 	paid_at?: string;
 }

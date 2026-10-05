@@ -8,7 +8,7 @@
 		Clock, CheckCircle2, ChefHat, BellRing, Sparkles, 
 		QrCode, ArrowLeft, RefreshCw, AlertCircle, Check,
 		Receipt, Printer, Store, X, Eye, Wallet,
-		Upload, Camera, Trash2, Image as ImageIcon
+		Upload, Camera, Trash2, Image as ImageIcon, Send
 	} from '@lucide/svelte';
 	import { uploadToGDrive, deleteFromGDrive } from '$lib/services/gdriveBucket';
 
@@ -28,6 +28,8 @@
 	let proofFileSize = $state<string>('');
 	let proofUploadedAt = $state<string>('');
 	let isUploadingProof = $state(false);
+	let isSubmittingProof = $state(false);
+	let proofSubmitted = $state(false);
 	let showProofModal = $state(false);
 	let gdriveFileUrl = $state<string | null>(null);
 	let gdriveFileId = $state<string | null>(null);
@@ -83,6 +85,14 @@
 		try {
 			const o = await api.get<Order>(`/public/orders/${orderId}`);
 			order = o;
+
+			if (o.proof_url) {
+				proofImage = o.proof_url;
+				proofSubmitted = true;
+				if (o.proof_url.startsWith('http')) {
+					gdriveFileUrl = o.proof_url;
+				}
+			}
 
 			if (o.status === 'WAITING_PAYMENT') {
 				try {
@@ -169,6 +179,7 @@
 		}
 
 		isUploadingProof = true;
+		proofSubmitted = false;
 		proofFileName = file.name;
 		proofFileSize = (file.size / 1024).toFixed(1) + ' KB';
 		proofUploadedAt = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
@@ -196,6 +207,12 @@
 			if (result.status === 'success') {
 				gdriveFileUrl = result.directUrl || result.fileUrl || null;
 				gdriveFileId = result.fileId || null;
+				// Jika sebelumnya sudah terkirim, update otomatis ke kasir dengan URL GDrive
+				if (proofSubmitted) {
+					api.post<Order>(`/public/orders/${orderId}/proof`, {
+						proof_url: gdriveFileUrl
+					}).catch((e) => console.warn('Auto-update proof URL error:', e));
+				}
 			}
 		} catch (err) {
 			console.error('Google Drive upload error (fallback to local preview)', err);
@@ -214,6 +231,30 @@
 		}
 	}
 
+	async function submitProofToCashier() {
+		const targetUrl = gdriveFileUrl || proofImage;
+		if (!targetUrl) {
+			alert('Silakan pilih foto bukti pembayaran terlebih dahulu.');
+			return;
+		}
+
+		isSubmittingProof = true;
+		try {
+			const updated = await api.post<Order>(`/public/orders/${orderId}/proof`, {
+				proof_url: targetUrl
+			});
+			if (updated) {
+				order = updated;
+			}
+			proofSubmitted = true;
+		} catch (err: any) {
+			console.error('Gagal mengirim bukti pembayaran:', err);
+			alert(err?.message || 'Gagal mengirim bukti pembayaran ke kasir. Silakan coba lagi.');
+		} finally {
+			isSubmittingProof = false;
+		}
+	}
+
 	async function removeProof() {
 		// Hapus juga file gambar bukti dari Google Drive
 		if (gdriveFileId || gdriveFileUrl) {
@@ -229,6 +270,7 @@
 		proofUploadedAt = '';
 		gdriveFileUrl = null;
 		gdriveFileId = null;
+		proofSubmitted = false;
 		try {
 			localStorage.removeItem(`payment_proof_${orderId}`);
 		} catch (_) {}
@@ -488,6 +530,46 @@
 													</button>
 												</div>
 											</div>
+										</div>
+
+										<!-- Tombol Aksi Kirim Bukti Pembayaran -->
+										<div class="pt-2 border-t border-slate-100 space-y-2">
+											{#if proofSubmitted || order?.proof_url}
+												<div class="flex items-center justify-between gap-2 p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800">
+													<div class="flex items-center gap-2 min-w-0">
+														<div class="w-6 h-6 rounded-full bg-emerald-100 flex items-center justify-center shrink-0">
+															<CheckCircle2 class="w-4 h-4 text-emerald-600" />
+														</div>
+														<div class="text-left min-w-0">
+															<p class="text-xs font-bold leading-tight truncate">Bukti Terkirim ke Kasir</p>
+															<p class="text-[10px] text-emerald-600 font-medium">Kasir sedang memverifikasi</p>
+														</div>
+													</div>
+													<button
+														type="button"
+														onclick={submitProofToCashier}
+														disabled={isSubmittingProof || isUploadingProof}
+														class="px-2.5 py-1 text-[11px] font-bold text-emerald-700 hover:text-emerald-900 bg-white border border-emerald-300 rounded-lg shadow-2xs hover:bg-emerald-50 transition-colors shrink-0 disabled:opacity-50 cursor-pointer"
+													>
+														{isSubmittingProof ? 'Mengirim...' : 'Kirim Ulang'}
+													</button>
+												</div>
+											{:else}
+												<button
+													type="button"
+													onclick={submitProofToCashier}
+													disabled={isSubmittingProof || isUploadingProof}
+													class="w-full py-2.5 px-4 bg-orange-600 hover:bg-orange-700 active:scale-98 disabled:opacity-50 text-white rounded-xl font-bold text-xs shadow-md shadow-orange-600/25 transition-all flex items-center justify-center gap-2 cursor-pointer"
+												>
+													{#if isSubmittingProof}
+														<RefreshCw class="w-4 h-4 animate-spin" />
+														<span>Mengirim Bukti ke Kasir...</span>
+													{:else}
+														<Send class="w-4 h-4" />
+														<span>Kirim Bukti Pembayaran</span>
+													{/if}
+												</button>
+											{/if}
 										</div>
 
 										<div class="bg-amber-50/80 border border-amber-200/70 rounded-xl p-2.5 flex items-start gap-2">

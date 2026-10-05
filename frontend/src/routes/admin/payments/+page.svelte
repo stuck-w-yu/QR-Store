@@ -28,12 +28,35 @@
 		gdriveUrl?: string;
 	} | null>(null);
 
-	function getOrderProof(orderId: string): { image: string; fileName: string; fileSize: string; uploadedAt: string; gdriveUrl?: string; gdriveId?: string } | null {
-		if (typeof window === 'undefined') return null;
-		try {
-			const saved = localStorage.getItem(`payment_proof_${orderId}`);
-			if (saved) return JSON.parse(saved);
-		} catch (_) {}
+	function getOrderProof(orderOrId: string | Order | null | undefined): { image: string; fileName: string; fileSize: string; uploadedAt: string; gdriveUrl?: string; gdriveId?: string } | null {
+		if (!orderOrId) return null;
+		const orderId = typeof orderOrId === 'string' ? orderOrId : orderOrId.id;
+		const orderObj = typeof orderOrId !== 'string' ? orderOrId : orders.find(o => o.id === orderId);
+		const proofUrl = orderObj?.proof_url;
+
+		let localData: any = null;
+		if (typeof window !== 'undefined') {
+			try {
+				const saved = localStorage.getItem(`payment_proof_${orderId}`);
+				if (saved) localData = JSON.parse(saved);
+			} catch (_) {}
+		}
+
+		if (proofUrl) {
+			return {
+				image: proofUrl,
+				fileName: localData?.fileName || 'bukti-pembayaran.jpg',
+				fileSize: localData?.fileSize || 'Foto Bukti Pelanggan',
+				uploadedAt: localData?.uploadedAt || 'Terkirim ke Kasir',
+				gdriveUrl: proofUrl.startsWith('http') ? proofUrl : (localData?.gdriveUrl || undefined),
+				gdriveId: localData?.gdriveId
+			};
+		}
+
+		if (localData?.image) {
+			return localData;
+		}
+
 		return null;
 	}
 
@@ -120,10 +143,11 @@
 						'ORDER_STATUS_CHANGED',
 						'PAYMENT_PAID',
 						'PAYMENT_CONFIRMED',
-						'order.confirmed'
+						'order.confirmed',
+						'PAYMENT_PROOF_SUBMITTED'
 					];
 					if (relevantEvents.includes(msg.event)) {
-						if (msg.event === 'NEW_ORDER_PENDING' || msg.event === 'order.created') {
+						if (msg.event === 'NEW_ORDER_PENDING' || msg.event === 'order.created' || msg.event === 'PAYMENT_PROOF_SUBMITTED') {
 							playChime();
 						}
 						// Direct update in state if order object is supplied
@@ -208,7 +232,11 @@
 
 	function openPaymentModal(o: Order) {
 		paymentModalOrder = o;
-		selectedMethod = 'CASH';
+		if (o.proof_url || o.payment_method === 'QRIS' || o.payment_method === 'QRIS_MANUAL') {
+			selectedMethod = 'QRIS_MANUAL';
+		} else {
+			selectedMethod = 'CASH';
+		}
 		paidAmount = o.total; // Default to exact amount
 	}
 
@@ -717,21 +745,21 @@
 				</div>
 			</div>
 
-			<!-- Proof of Payment Uploaded by Customer (if available) -->
-			{#if getOrderProof(paymentModalOrder.id)}
-				{@const proof = getOrderProof(paymentModalOrder.id)!}
-				<div class="p-3.5 bg-amber-50/90 border border-amber-200/90 rounded-2xl space-y-2.5">
-					<div class="flex items-center justify-between text-xs">
-						<span class="font-bold text-amber-950 flex items-center gap-1.5">
-							<Camera class="w-4 h-4 text-amber-700" />
-							Bukti Pembayaran dari Pelanggan
-						</span>
-						<span class="text-[10px] text-amber-700 font-medium">
-							Diunggah {proof.uploadedAt || 'Baru saja'}
-						</span>
-					</div>
-
-					<div class="flex items-center gap-3">
+			{#if selectedMethod === 'CASH'}
+				<!-- Quick Proof notice for Cash if customer uploaded something -->
+				{#if getOrderProof(paymentModalOrder)}
+					{@const proof = getOrderProof(paymentModalOrder)!}
+					<div class="p-3 bg-amber-50/90 border border-amber-200/90 rounded-2xl flex items-center justify-between gap-2 text-left">
+						<div class="flex items-center gap-2 min-w-0">
+							<img src={proof.image} alt="Bukti" class="w-8 h-8 rounded-lg object-cover border border-amber-200 shrink-0" />
+							<div class="text-[11px] truncate">
+								<span class="font-bold text-amber-950 truncate flex items-center gap-1">
+									<Camera class="w-3 h-3 text-amber-600" />
+									Pelanggan mengunggah foto bukti
+								</span>
+								<span class="text-amber-700 text-[10px] block truncate">{proof.fileName || 'Foto Bukti'} &bull; {proof.uploadedAt}</span>
+							</div>
+						</div>
 						<button
 							type="button"
 							onclick={() => {
@@ -740,37 +768,14 @@
 									orderNumber: paymentModalOrder!.order_number
 								};
 							}}
-							class="relative w-14 h-14 rounded-xl overflow-hidden bg-slate-900 border border-amber-300 group shrink-0 cursor-pointer"
-							title="Klik untuk memperbesar foto bukti"
+							class="px-2.5 py-1 rounded-xl bg-white hover:bg-amber-100 text-amber-900 font-bold text-[11px] border border-amber-300 shadow-2xs transition-colors shrink-0 flex items-center gap-1 cursor-pointer"
 						>
-							<img src={proof.image} alt="Bukti Transfer" class="w-full h-full object-cover group-hover:scale-110 transition-transform" />
-							<div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white">
-								<Eye class="w-4 h-4" />
-							</div>
+							<Eye class="w-3 h-3" />
+							<span>Lihat</span>
 						</button>
-
-						<div class="min-w-0 flex-1 text-left">
-							<p class="text-xs font-bold text-slate-800 truncate">{proof.fileName || 'Foto Bukti Pembayaran'}</p>
-							<p class="text-[11px] text-slate-500 font-medium">{proof.fileSize}</p>
-							<button
-								type="button"
-								onclick={() => {
-									viewProofModalData = {
-										...proof,
-										orderNumber: paymentModalOrder!.order_number
-									};
-								}}
-								class="text-[11px] font-bold text-orange-600 hover:text-orange-700 flex items-center gap-1 mt-1 cursor-pointer"
-							>
-								<Eye class="w-3.5 h-3.5" />
-								Periksa Foto Bukti Transfer
-							</button>
-						</div>
 					</div>
-				</div>
-			{/if}
+				{/if}
 
-			{#if selectedMethod === 'CASH'}
 				<!-- Cash Calculator -->
 				<div class="space-y-3">
 					<div class="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center justify-between">
@@ -849,6 +854,114 @@
 							{/if}
 						</div>
 					</div>
+				</div>
+			{:else if selectedMethod === 'QRIS_MANUAL'}
+				<!-- QRIS Verification Section with Customer Proof of Payment -->
+				<div class="space-y-3">
+					<div class="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center justify-between">
+						<span class="flex items-center gap-1.5">
+							<Sparkles class="w-4 h-4 text-orange-600" />
+							Konfirmasi Pembayaran QRIS
+						</span>
+						<span class="text-[11px] text-slate-400 font-medium">QRIS Kasir</span>
+					</div>
+
+					{#if getOrderProof(paymentModalOrder)}
+						{@const proof = getOrderProof(paymentModalOrder)!}
+						<div class="p-4 bg-gradient-to-br from-amber-50/90 to-orange-50/80 border-2 border-orange-200/90 rounded-2xl space-y-3 shadow-xs text-left">
+							<div class="flex items-center justify-between">
+								<div class="flex items-center gap-1.5 text-xs font-extrabold text-amber-950">
+									<Camera class="w-4 h-4 text-orange-600" />
+									<span>Bukti Foto dari Pelanggan</span>
+								</div>
+								<span class="text-[10px] bg-white text-amber-800 font-bold px-2 py-0.5 rounded-full border border-amber-200">
+									{proof.uploadedAt || 'Terkirim'}
+								</span>
+							</div>
+
+							<!-- Image Preview Card -->
+							<div class="flex items-center gap-3.5 bg-white p-3 rounded-xl border border-orange-150 shadow-2xs">
+								<button
+									type="button"
+									onclick={() => {
+										viewProofModalData = {
+											...proof,
+											orderNumber: paymentModalOrder!.order_number
+										};
+									}}
+									class="relative w-16 h-16 rounded-xl overflow-hidden bg-slate-900 border-2 border-orange-400 group shrink-0 cursor-pointer shadow-xs"
+									title="Klik untuk memperbesar foto bukti"
+								>
+									<img src={proof.image} alt="Bukti Transfer QRIS" class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-200" />
+									<div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center text-white">
+										<Eye class="w-4 h-4" />
+									</div>
+								</button>
+
+								<div class="min-w-0 flex-1 space-y-1">
+									<p class="text-xs font-black text-slate-900 truncate" title={proof.fileName}>
+										{proof.fileName || 'bukti-qris.jpg'}
+									</p>
+									<p class="text-[11px] text-slate-500 font-medium">
+										{proof.fileSize}
+									</p>
+									<div class="pt-1 flex items-center gap-2 flex-wrap">
+										<button
+											type="button"
+											onclick={() => {
+												viewProofModalData = {
+													...proof,
+													orderNumber: paymentModalOrder!.order_number
+												};
+											}}
+											class="px-2.5 py-1 bg-orange-600 hover:bg-orange-700 text-white rounded-lg text-[11px] font-bold flex items-center gap-1 shadow-2xs transition-colors cursor-pointer"
+										>
+											<Eye class="w-3 h-3" />
+											<span>Lihat Foto Penuh</span>
+										</button>
+										{#if proof.gdriveUrl}
+											<a
+												href={proof.gdriveUrl}
+												target="_blank"
+												rel="noopener noreferrer"
+												class="px-2.5 py-1 bg-white hover:bg-slate-100 text-blue-600 border border-blue-200 rounded-lg text-[11px] font-bold flex items-center gap-1 transition-colors"
+											>
+												<span>Folder GDrive</span>
+											</a>
+										{/if}
+									</div>
+								</div>
+							</div>
+
+							<div class="bg-amber-100/70 border border-amber-300/80 rounded-xl p-2.5 flex items-start gap-2">
+								<CheckCircle2 class="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+								<p class="text-[11px] text-amber-900 leading-tight">
+									Pastikan nominal pada foto bukti pembayaran sesuai dengan total tagihan <strong>{formatRupiah(paymentModalOrder.total)}</strong>.
+								</p>
+							</div>
+						</div>
+					{:else}
+						<div class="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-2 text-left">
+							<div class="flex items-center gap-2 text-slate-700 font-bold text-xs">
+								<AlertCircle class="w-4 h-4 text-amber-500 shrink-0" />
+								<span>Belum Ada Foto Bukti dari Pelanggan</span>
+							</div>
+							<p class="text-[11px] text-slate-500 leading-relaxed">
+								Pelanggan belum mengirimkan foto bukti pembayaran QRIS. Anda tetap dapat mengonfirmasi jika saldo rekening / notifikasi soundbox QRIS sudah masuk.
+							</p>
+						</div>
+					{/if}
+				</div>
+			{:else if selectedMethod === 'DEBIT'}
+				<!-- Debit / EDC Section -->
+				<div class="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-2 text-left">
+					<div class="flex items-center gap-2 text-slate-700 font-bold text-xs">
+						<DollarSign class="w-4 h-4 text-orange-600 shrink-0" />
+						<span>Pembayaran Kartu Debit / Mesin EDC</span>
+					</div>
+					<p class="text-[11px] text-slate-500 leading-relaxed">
+						Pastikan transaksi pada mesin EDC telah berhasil (APPROVED) dan struk EDC telah keluar sebelum menekan tombol konfirmasi.
+					</p>
 				</div>
 			{/if}
 

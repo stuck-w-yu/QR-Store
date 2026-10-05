@@ -25,6 +25,8 @@ func RunMigrationsAndSeed(ctx context.Context, db *DB) error {
 	_, _ = db.Pool.Exec(ctx, "ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_method VARCHAR(50)")
 	_, _ = db.Pool.Exec(ctx, "ALTER TABLE orders ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ")
 	_, _ = db.Pool.Exec(ctx, "ALTER TABLE orders ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMPTZ")
+	_, _ = db.Pool.Exec(ctx, "ALTER TABLE orders ADD COLUMN IF NOT EXISTS proof_url TEXT")
+	_, _ = db.Pool.Exec(ctx, "ALTER TABLE payments ADD COLUMN IF NOT EXISTS proof_url TEXT")
 	_, _ = db.Pool.Exec(ctx, "ALTER TABLE payments ADD COLUMN IF NOT EXISTS paid_amount BIGINT DEFAULT 0 NOT NULL")
 	_, _ = db.Pool.Exec(ctx, "ALTER TABLE payments ADD COLUMN IF NOT EXISTS change_amount BIGINT DEFAULT 0 NOT NULL")
 	_, _ = db.Pool.Exec(ctx, "ALTER TABLE payments ADD COLUMN IF NOT EXISTS reference_number VARCHAR(100)")
