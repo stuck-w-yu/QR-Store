@@ -62,11 +62,23 @@ class APIClient {
 			headers
 		});
 
-		const json = await response.json();
+		let json: any = null;
+		const contentType = response.headers.get('content-type') || '';
+		if (contentType.includes('application/json')) {
+			try {
+				json = await response.json();
+			} catch (err) {
+				json = null;
+			}
+		}
 
-		if (!response.ok || !json.success) {
-			const errMsg = json?.error?.message || json?.message || 'Terjadi kesalahan pada sistem';
-			const errCode = json?.error?.code || 'UNKNOWN_ERROR';
+		if (!response.ok || !json || !json.success) {
+			let errMsg = json?.error?.message || json?.message;
+			if (!errMsg) {
+				const rawText = !json ? await response.text().catch(() => '') : '';
+				errMsg = rawText || `HTTP ${response.status}: ${response.statusText || 'Terjadi kesalahan pada sistem'}`;
+			}
+			const errCode = json?.error?.code || (response.status ? `HTTP_${response.status}` : 'UNKNOWN_ERROR');
 			const error = new Error(errMsg) as any;
 			error.code = errCode;
 			throw error;

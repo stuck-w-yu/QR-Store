@@ -22,9 +22,14 @@ type Config struct {
 func LoadConfig() *Config {
 	_ = godotenv.Load()
 
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = getEnv("APP_PORT", "8080")
+	}
+
 	return &Config{
 		AppEnv:               getEnv("APP_ENV", "development"),
-		AppPort:              getEnv("APP_PORT", "8080"),
+		AppPort:              port,
 		DatabaseURL:          getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/qr_store?sslmode=disable"),
 		JWTSecret:            getEnv("JWT_SECRET", "super-secret-jwt-key-change-in-production-1234567890"),
 		PaymentProvider:      getEnv("PAYMENT_PROVIDER", "mock"), // mock, midtrans, xendit
