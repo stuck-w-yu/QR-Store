@@ -1,5 +1,21 @@
 import type { APIResponse } from '$lib/types';
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080/api/v1';
+
+function getBaseURL(): string {
+	if (import.meta.env.VITE_API_URL) {
+		return import.meta.env.VITE_API_URL;
+	}
+	// Check Vercel service binding when executing in server-side functions / SSR
+	if (typeof process !== 'undefined' && process.env?.BACKEND_URL) {
+		return `${process.env.BACKEND_URL.replace(/\/$/, '')}/api/v1`;
+	}
+	// In the browser, use relative path to route through Vercel's rewrite on the same domain
+	if (typeof window !== 'undefined') {
+		return '/api/v1';
+	}
+	return 'http://localhost:8080/api/v1';
+}
+
+const API_BASE = getBaseURL();
 
 class APIClient {
 	private token: string | null = null;

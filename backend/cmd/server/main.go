@@ -130,8 +130,9 @@ func main() {
 				allowedOrigin = "*"
 			}
 		} else {
+			cleanReq := strings.TrimSuffix(reqOrigin, "/")
 			for _, o := range corsOrigins {
-				if o == reqOrigin {
+				if o == "*" || strings.TrimSuffix(o, "/") == cleanReq {
 					allowedOrigin = reqOrigin
 					break
 				}
