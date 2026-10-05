@@ -1,6 +1,6 @@
 module qr-store/backend
 
-go 1.27.1
+go 1.26.0
 
 require (
 	github.com/gin-gonic/gin v1.12.0
