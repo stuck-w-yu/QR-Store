@@ -19,8 +19,9 @@
 	let soundEnabled = $state(true);
 	let wsConnected = $state(false);
 
-	// CRUD Edit Order State
+	// CRUD Edit & Delete Order State
 	let editModalOrder = $state<Order | null>(null);
+	let deleteModalOrder = $state<Order | null>(null);
 	let editStatus = $state<string>('');
 	let editPaymentStatus = $state<string>('');
 	let editNotes = $state<string>('');
@@ -339,13 +340,19 @@
 		}
 	}
 
-	async function handleDeleteOrder(order: Order) {
-		if (!confirm(`Hapus permanen pesanan #${order.order_number}? Seluruh data pesanan nyangkut ini akan dihapus bersih dari database.`)) return;
+	function openDeleteModal(order: Order) {
+		deleteModalOrder = order;
+	}
+
+	async function executeDeleteOrder(order: Order) {
 		deletingOrderId = order.id;
 		try {
 			await api.delete(`/orders/${order.id}`);
 			if (editModalOrder?.id === order.id) {
 				editModalOrder = null;
+			}
+			if (deleteModalOrder?.id === order.id) {
+				deleteModalOrder = null;
 			}
 			orders = orders.filter((o) => o.id !== order.id);
 			await loadOrders();
@@ -354,6 +361,10 @@
 		} finally {
 			deletingOrderId = null;
 		}
+	}
+
+	async function handleDeleteOrder(order: Order) {
+		openDeleteModal(order);
 	}
 
 	async function handleRestoreOrder(order: Order, targetStatus: 'WAITING_PAYMENT' | 'CONFIRMED' = 'CONFIRMED') {
@@ -649,22 +660,34 @@
 								</span>
 							</div>
 
-							{#if order.status === 'CANCELLED'}
-								<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-700 border border-rose-200">
-									<XCircle class="w-3 h-3" />
-									DIBATALKAN
-								</span>
-							{:else if order.payment_status === 'PAID'}
-								<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-									<CheckCircle2 class="w-3 h-3" />
-									LUNAS
-								</span>
-							{:else}
-								<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 animate-pulse">
-									<Clock class="w-3 h-3" />
-									BELUM BAYAR
-								</span>
-							{/if}
+							<div class="flex items-center gap-1.5 flex-wrap justify-end">
+								{#if order.status === 'CANCELLED'}
+									<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-700 border border-rose-200">
+										<XCircle class="w-3 h-3" />
+										DIBATALKAN
+									</span>
+								{:else if order.payment_status === 'PAID'}
+									<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+										<CheckCircle2 class="w-3 h-3" />
+										LUNAS
+									</span>
+								{:else}
+									<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 animate-pulse">
+										<Clock class="w-3 h-3" />
+										BELUM BAYAR
+									</span>
+								{/if}
+
+								<!-- Tombol Cepat Hapus di Header -->
+								<button
+									type="button"
+									onclick={() => openDeleteModal(order)}
+									class="p-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200/80 transition-colors cursor-pointer shrink-0"
+									title="Hapus Pesanan Ini"
+								>
+									<Trash2 class="w-3.5 h-3.5" />
+								</button>
+							</div>
 						</div>
 
 						<div class="flex items-center justify-between text-[11px] text-slate-400 font-medium">
@@ -672,9 +695,9 @@
 							<span class="text-orange-600 font-bold">{getElapsedMinutes(order.created_at.toString())} mnt lalu</span>
 						</div>
 
-						<!-- Status Alur Dapur / Pesanan -->
-						<div class="pt-2 border-t border-slate-200/60 flex items-center justify-between text-[11px]">
-							<span class="text-slate-500 font-medium">
+						<!-- Status Alur Dapur / Pesanan & Tombol CRUD -->
+						<div class="pt-2 border-t border-slate-200/60 flex items-center justify-between gap-2 text-[11px]">
+							<span class="text-slate-500 font-medium truncate">
 								Alur: 
 								<span class="font-bold {
 									order.status === 'CANCELLED' ? 'text-rose-600' :
@@ -691,15 +714,26 @@
 								</span>
 							</span>
 
-							<button
-								type="button"
-								onclick={() => openEditModal(order)}
-								class="text-[11px] text-slate-500 hover:text-orange-600 font-bold flex items-center gap-1 cursor-pointer transition-colors"
-								title="Kelola / Edit Status Pesanan"
-							>
-								<SlidersHorizontal class="w-3 h-3" />
-								<span>Kelola</span>
-							</button>
+							<div class="flex items-center gap-1.5 shrink-0">
+								<button
+									type="button"
+									onclick={() => openEditModal(order)}
+									class="px-2 py-0.5 rounded-lg bg-white hover:bg-orange-50 hover:text-orange-600 text-slate-600 font-bold text-[11px] border border-slate-200 shadow-2xs transition-colors flex items-center gap-1 cursor-pointer"
+									title="Kelola / Edit Status Pesanan (CRUD)"
+								>
+									<SlidersHorizontal class="w-3 h-3 text-orange-600" />
+									<span>Kelola (CRUD)</span>
+								</button>
+								<button
+									type="button"
+									onclick={() => openDeleteModal(order)}
+									class="px-2 py-0.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold text-[11px] border border-rose-200 shadow-2xs transition-colors flex items-center gap-1 cursor-pointer"
+									title="Hapus Pesanan Ini"
+								>
+									<Trash2 class="w-3 h-3" />
+									<span>Hapus</span>
+								</button>
+							</div>
 						</div>
 					</div>
 
@@ -823,7 +857,7 @@
 								<button
 									type="button"
 									onclick={() => openPaymentModal(order)}
-									class="flex-1 py-2.5 px-4 bg-orange-600 hover:bg-orange-700 active:scale-98 text-white rounded-2xl font-black text-xs shadow-md shadow-orange-600/25 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+									class="flex-1 py-2.5 px-3 bg-orange-600 hover:bg-orange-700 active:scale-98 text-white rounded-2xl font-black text-xs shadow-md shadow-orange-600/25 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
 								>
 									<Check class="w-4 h-4" />
 									<span>Terima Kasir / Tunai</span>
@@ -831,19 +865,18 @@
 								<button
 									type="button"
 									onclick={() => openEditModal(order)}
-									class="p-2.5 rounded-2xl bg-white hover:bg-slate-100 text-slate-600 border border-slate-200 transition-colors cursor-pointer"
-									title="Kelola / Edit Pesanan"
+									class="p-2.5 rounded-2xl bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 transition-colors cursor-pointer"
+									title="Kelola / Edit Status Pesanan (CRUD)"
 								>
-									<SlidersHorizontal class="w-4 h-4" />
+									<SlidersHorizontal class="w-4 h-4 text-orange-600" />
 								</button>
 								<button
 									type="button"
-									onclick={() => handleCancelOrder(order.id)}
-									disabled={cancelSubmitting}
-									class="p-2.5 rounded-2xl bg-white hover:bg-rose-50 text-slate-400 hover:text-rose-600 border border-slate-200 transition-colors cursor-pointer"
-									title="Batalkan Pesanan Ini"
+									onclick={() => openDeleteModal(order)}
+									class="p-2.5 rounded-2xl bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 transition-colors cursor-pointer"
+									title="Hapus Pesanan Ini"
 								>
-									<XCircle class="w-4 h-4" />
+									<Trash2 class="w-4 h-4" />
 								</button>
 							</div>
 						{:else}
@@ -860,7 +893,7 @@
 										Diteruskan ke Dapur
 									{/if}
 								</span>
-								<div class="flex items-center gap-2">
+								<div class="flex items-center gap-1.5">
 									<button
 										type="button"
 										onclick={() => {
@@ -871,17 +904,27 @@
 												paymentMethod: order.payment_method || 'CASH'
 											};
 										}}
-										class="text-orange-600 hover:underline font-bold text-[11px] cursor-pointer"
+										class="text-orange-600 hover:underline font-bold text-[11px] cursor-pointer mr-1"
 									>
 										Lihat Struk
 									</button>
 									<button
 										type="button"
 										onclick={() => openEditModal(order)}
-										class="p-1.5 rounded-lg hover:bg-slate-200 text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
-										title="Kelola Status Pesanan"
+										class="px-2 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] transition-colors flex items-center gap-1 cursor-pointer"
+										title="Kelola Status Pesanan (CRUD)"
 									>
-										<SlidersHorizontal class="w-3.5 h-3.5" />
+										<SlidersHorizontal class="w-3.5 h-3.5 text-orange-600" />
+										<span>Kelola</span>
+									</button>
+									<button
+										type="button"
+										onclick={() => openDeleteModal(order)}
+										class="px-2 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 font-bold text-[11px] transition-colors flex items-center gap-1 cursor-pointer"
+										title="Hapus Pesanan Ini"
+									>
+										<Trash2 class="w-3.5 h-3.5" />
+										<span>Hapus</span>
 									</button>
 								</div>
 							</div>
@@ -1505,6 +1548,106 @@
 						{/if}
 					</button>
 				</div>
+			</div>
+		</div>
+	</div>
+{/if}
+
+<!-- ==================== DELETE ORDER CONFIRMATION MODAL ==================== -->
+{#if deleteModalOrder}
+	<div
+		class="fixed inset-0 bg-slate-950/70 backdrop-blur-xs z-50 flex items-center justify-center p-4"
+		onclick={(e) => {
+			if (e.target === e.currentTarget && !deletingOrderId) deleteModalOrder = null;
+		}}
+		onkeydown={(e) => {
+			if (e.key === 'Escape' && !deletingOrderId) deleteModalOrder = null;
+		}}
+		tabindex="-1"
+		role="dialog"
+		aria-modal="true"
+	>
+		<div class="bg-white rounded-3xl p-6 sm:p-7 w-full max-w-md space-y-5 shadow-2xl animate-in fade-in zoom-in-95 duration-150 border border-rose-100">
+			<!-- Header -->
+			<div class="flex items-center gap-3">
+				<div class="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+					<Trash2 class="w-6 h-6" />
+				</div>
+				<div>
+					<span class="text-[10px] font-black uppercase tracking-wider text-rose-600 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-200">
+						Hapus Pesanan Permanen
+					</span>
+					<h3 class="text-lg font-black text-slate-900 font-['Outfit'] mt-0.5">
+						#{deleteModalOrder.order_number}
+					</h3>
+				</div>
+			</div>
+
+			<!-- Order Summary -->
+			<div class="p-3.5 bg-slate-50 rounded-2xl border border-slate-100 space-y-2 text-xs text-slate-600">
+				<div class="flex justify-between">
+					<span class="text-slate-400">Meja:</span>
+					<span class="font-bold text-slate-800">{deleteModalOrder.table_name || `Meja ${deleteModalOrder.table_id || '?'}`}</span>
+				</div>
+				<div class="flex justify-between">
+					<span class="text-slate-400">Total Tagihan:</span>
+					<span class="font-bold text-orange-600 font-['Outfit']">{formatRupiah(deleteModalOrder.total)}</span>
+				</div>
+				<div class="flex justify-between">
+					<span class="text-slate-400">Status Pesanan:</span>
+					<span class="font-bold text-slate-800">{deleteModalOrder.status} ({deleteModalOrder.payment_status})</span>
+				</div>
+				<div class="flex justify-between">
+					<span class="text-slate-400">Waktu Pesan:</span>
+					<span class="font-medium text-slate-700">{new Date(deleteModalOrder.created_at).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })}</span>
+				</div>
+				{#if deleteModalOrder.items && deleteModalOrder.items.length > 0}
+					<div class="pt-1.5 border-t border-slate-200/60">
+						<span class="text-slate-400 block mb-1">Menu yang dipesan ({deleteModalOrder.items.length} item):</span>
+						<div class="max-h-24 overflow-y-auto space-y-1 pr-1 text-[11px]">
+							{#each deleteModalOrder.items as it}
+								<div class="flex justify-between text-slate-700">
+									<span>{it.quantity}x {it.menu_name_snapshot}</span>
+									<span class="font-semibold text-slate-500">{formatRupiah(it.subtotal)}</span>
+								</div>
+							{/each}
+						</div>
+					</div>
+				{/if}
+			</div>
+
+			<!-- Warning Message -->
+			<div class="p-3 bg-rose-50/90 rounded-2xl border border-rose-200 text-[11px] text-rose-800 flex items-start gap-2">
+				<AlertTriangle class="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+				<div>
+					<strong>Perhatian:</strong> Seluruh data pesanan ini (termasuk tagihan, status dapur, dan transaksi) akan <strong>dihapus permanen</strong> dari sistem dan database. Tindakan ini tidak dapat dibatalkan.
+				</div>
+			</div>
+
+			<!-- Action Buttons -->
+			<div class="flex items-center gap-2 pt-1">
+				<button
+					type="button"
+					onclick={() => (deleteModalOrder = null)}
+					disabled={deletingOrderId === deleteModalOrder.id}
+					class="flex-1 py-3 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition-colors cursor-pointer"
+				>
+					Batal
+				</button>
+				<button
+					type="button"
+					onclick={() => executeDeleteOrder(deleteModalOrder!)}
+					disabled={deletingOrderId === deleteModalOrder.id}
+					class="flex-1 py-3 px-4 rounded-xl bg-rose-600 hover:bg-rose-700 active:scale-95 text-white font-black text-xs shadow-md shadow-rose-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+				>
+					{#if deletingOrderId === deleteModalOrder.id}
+						<RefreshCw class="w-4 h-4 animate-spin" />
+						<span>Menghapus...</span>
+					{:else}
+						<Trash2 class="w-4 h-4" />
+						<span>Ya, Hapus Sekarang</span>
+					{/if}
+				</button>
 			</div>
 		</div>
 	</div>
