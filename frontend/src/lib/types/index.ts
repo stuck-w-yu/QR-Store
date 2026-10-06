@@ -95,6 +95,15 @@ export interface Table {
 	status: string;
 }
 
+export interface PublicActiveOrderSummary {
+	id: string;
+	order_number: string;
+	status: OrderStatus;
+	payment_status?: string;
+	total: number;
+	created_at: string;
+}
+
 export interface PublicTableInfo {
 	restaurant: {
 		id: string;
@@ -110,6 +119,7 @@ export interface PublicTableInfo {
 		qr_token: string;
 		status: string;
 	};
+	active_order?: PublicActiveOrderSummary | null;
 }
 
 export interface ModifierOption {

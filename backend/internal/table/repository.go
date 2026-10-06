@@ -23,6 +23,15 @@ type Table struct {
 	UpdatedAt    time.Time `json:"updated_at"`
 }
 
+type PublicActiveOrderSummary struct {
+	ID            string    `json:"id"`
+	OrderNumber   string    `json:"order_number"`
+	Status        string    `json:"status"` // WAITING_PAYMENT, CONFIRMED, PREPARING, READY
+	PaymentStatus string    `json:"payment_status"`
+	Total         int64     `json:"total"`
+	CreatedAt     time.Time `json:"created_at"`
+}
+
 type PublicTableInfo struct {
 	Restaurant struct {
 		ID             string  `json:"id"`
@@ -38,6 +47,7 @@ type PublicTableInfo struct {
 		QRToken string `json:"qr_token"`
 		Status  string `json:"status"`
 	} `json:"table"`
+	ActiveOrder *PublicActiveOrderSummary `json:"active_order,omitempty"`
 }
 
 type ServiceRequest struct {
@@ -120,6 +130,28 @@ func (r *repository) GetByQRToken(ctx context.Context, qrToken string) (*PublicT
 		}
 		return nil, err
 	}
+
+	// Cek apakah meja ini memiliki pesanan yang sedang diproses (belum selesai atau dibatalkan)
+	activeOrderQuery := `
+		SELECT id, order_number, status, payment_status, total, created_at
+		FROM orders
+		WHERE table_id = $1 AND status IN ('WAITING_PAYMENT', 'CONFIRMED', 'PREPARING', 'READY')
+		ORDER BY created_at DESC
+		LIMIT 1
+	`
+	var activeOrder PublicActiveOrderSummary
+	err = r.pool.QueryRow(ctx, activeOrderQuery, info.Table.ID).Scan(
+		&activeOrder.ID,
+		&activeOrder.OrderNumber,
+		&activeOrder.Status,
+		&activeOrder.PaymentStatus,
+		&activeOrder.Total,
+		&activeOrder.CreatedAt,
+	)
+	if err == nil {
+		info.ActiveOrder = &activeOrder
+	}
+
 	return &info, nil
 }
 

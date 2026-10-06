@@ -1,12 +1,13 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { api, formatRupiah } from '$lib/api/client';
 	import { cart } from '$lib/stores/cart.svelte';
-	import type { PublicTableInfo, CategoryWithMenus, Menu, ModifierOption } from '$lib/types';
+	import type { PublicTableInfo, CategoryWithMenus, Menu, ModifierOption, PublicActiveOrderSummary } from '$lib/types';
 	import { 
 		ShoppingBag, UtensilsCrossed, Plus, Minus, X, Check, 
-		Clock, AlertCircle, Sparkles, ChevronRight, Store 
+		Clock, AlertCircle, Sparkles, ChevronRight, Store, ChefHat, CheckCircle2, ArrowRight
 	} from '@lucide/svelte';
 
 	let loading = $state(true);
@@ -14,6 +15,8 @@
 	let catalog = $state<CategoryWithMenus[]>([]);
 	let activeCategory = $state<string>('');
 	let tableInfo = $state<PublicTableInfo | null>(null);
+	let currentToken = $state<string>('');
+	let activeOrder = $state<PublicActiveOrderSummary | null>(null);
 
 	// Modal State
 	let selectedMenu = $state<Menu | null>(null);
@@ -21,8 +24,25 @@
 	let itemQuantity = $state(1);
 	let itemNotes = $state('');
 
+	function getStatusBadge(status?: string) {
+		switch (status) {
+			case 'PREPARING':
+				return { label: 'Sedang Dimasak', bg: 'bg-orange-500/10 text-orange-600 border-orange-200', icon: ChefHat };
+			case 'CONFIRMED':
+				return { label: 'Pesanan Diterima (Antrean Dapur)', bg: 'bg-blue-500/10 text-blue-600 border-blue-200', icon: Clock };
+			case 'WAITING_PAYMENT':
+				return { label: 'Menunggu Pembayaran', bg: 'bg-amber-500/10 text-amber-600 border-amber-200', icon: Clock };
+			case 'READY':
+				return { label: 'Siap Diantar', bg: 'bg-emerald-500/10 text-emerald-600 border-emerald-200', icon: CheckCircle2 };
+			default:
+				return { label: 'Sedang Diproses', bg: 'bg-slate-500/10 text-slate-600 border-slate-200', icon: Clock };
+		}
+	}
+
 	onMount(async () => {
 		const token = page.url.searchParams.get('token') || 'demo-qr-token-table-01';
+		currentToken = token;
+		const isNewOrderRequested = page.url.searchParams.get('new_order') === 'true';
 
 		try {
 			loading = true;
@@ -30,6 +50,44 @@
 			const info = await api.get<PublicTableInfo>(`/public/tables/${token}`);
 			tableInfo = info;
 			cart.setSession(token, info);
+
+			try {
+				localStorage.setItem('last_qr_token', token);
+			} catch (_) {}
+
+			// Deteksi apakah ada pesanan yang sedang diproses untuk meja ini
+			let existingActiveOrder: PublicActiveOrderSummary | null = info.active_order || null;
+			if (!existingActiveOrder) {
+				const savedOrderId = localStorage.getItem(`active_order_${token}`);
+				if (savedOrderId) {
+					try {
+						const orderData = await api.get<any>(`/public/orders/${savedOrderId}`);
+						if (orderData && ['WAITING_PAYMENT', 'CONFIRMED', 'PREPARING', 'READY'].includes(orderData.status)) {
+							existingActiveOrder = {
+								id: orderData.id,
+								order_number: orderData.order_number,
+								status: orderData.status,
+								payment_status: orderData.payment_status,
+								total: orderData.total,
+								created_at: orderData.created_at
+							};
+						} else {
+							localStorage.removeItem(`active_order_${token}`);
+						}
+					} catch (_) {
+						localStorage.removeItem(`active_order_${token}`);
+					}
+				}
+			}
+
+			activeOrder = existingActiveOrder;
+
+			// Jika ada pesanan yang sedang diproses dan user belum meminta pesan menu baru,
+			// alihkan langsung ke halaman status pemesanan
+			if (existingActiveOrder && !isNewOrderRequested) {
+				goto(`/order/status/${existingActiveOrder.id}?token=${encodeURIComponent(token)}`);
+				return;
+			}
 
 			// 2. Fetch digital menu catalog
 			const catData = await api.get<CategoryWithMenus[]>(`/public/restaurants/${info.restaurant.id}/menu`);
@@ -154,6 +212,42 @@
 
 		<!-- Main Content Container -->
 		<main class="max-w-lg mx-auto px-4 -mt-7 relative z-20">
+			<!-- Active Order Status Banner (Jika ada pesanan yang sedang diproses & pelanggan menambah pesanan baru) -->
+			{#if activeOrder}
+				{@const badge = getStatusBadge(activeOrder.status)}
+				<div class="mb-4 bg-white/95 backdrop-blur-md rounded-2xl p-3.5 shadow-md border-2 border-orange-500/40 flex items-center justify-between gap-3 animate-in fade-in slide-in-from-top-2">
+					<div class="flex items-center gap-3 min-w-0">
+						<div class="w-10 h-10 rounded-xl bg-orange-50 border border-orange-200 flex items-center justify-center text-orange-600 shrink-0 shadow-xs">
+							<badge.icon class="w-5 h-5" />
+						</div>
+						<div class="min-w-0">
+							<div class="flex items-center gap-1.5 flex-wrap">
+								<span class="text-xs font-bold text-slate-800">Pesanan Aktif ({activeOrder.order_number})</span>
+								<span class="text-[10px] font-extrabold px-2 py-0.5 rounded-full border {badge.bg}">
+									{badge.label}
+								</span>
+							</div>
+							<p class="text-[11px] text-slate-500 truncate mt-0.5">
+								{activeOrder.status === 'PREPARING'
+									? 'Sedang dimasak oleh chef di dapur'
+									: activeOrder.status === 'CONFIRMED'
+									? 'Pesanan diterima & menunggu antrean dapur'
+									: activeOrder.status === 'WAITING_PAYMENT'
+									? 'Menunggu pembayaran selesai'
+									: 'Hidangan sudah selesai dimasak'}
+							</p>
+						</div>
+					</div>
+					<a
+						href="/order/status/{activeOrder.id}?token={cart.qrToken || currentToken}"
+						class="shrink-0 bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs px-3 py-2 rounded-xl flex items-center gap-1 shadow-xs transition-colors"
+					>
+						<span>Cek Status</span>
+						<ArrowRight class="w-3.5 h-3.5" />
+					</a>
+				</div>
+			{/if}
+
 			<!-- Sticky Category Navigation Bar -->
 			<div class="sticky top-2 z-30 bg-white/95 backdrop-blur-md rounded-2xl p-1.5 shadow-md border border-slate-200/60 mb-6 overflow-x-auto scrollbar-none flex gap-1.5">
 				{#each catalog as cat}

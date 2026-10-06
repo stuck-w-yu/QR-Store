@@ -2,13 +2,15 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { page } from '$app/state';
 	import { api, formatRupiah } from '$lib/api/client';
+	import { cart } from '$lib/stores/cart.svelte';
 	import type { Order, Payment } from '$lib/types';
 	import confetti from 'canvas-confetti';
 	import { 
 		Clock, CheckCircle2, ChefHat, BellRing, Sparkles, 
 		QrCode, ArrowLeft, RefreshCw, AlertCircle, Check,
 		Receipt, Printer, Store, X, Eye, Wallet,
-		Upload, Camera, Trash2, Image as ImageIcon, Send
+		Upload, Camera, Trash2, Image as ImageIcon, Send,
+		UtensilsCrossed, Plus, ArrowRight
 	} from '@lucide/svelte';
 	import { uploadToGDrive, deleteFromGDrive } from '$lib/services/gdriveBucket';
 
@@ -21,6 +23,17 @@
 	let showInvoiceModal = $state(false);
 	let invoiceAutoShown = $state(false);
 	let selectedMethod = $state<'QRIS' | 'CASH'>('QRIS');
+
+	const qrToken = $derived(
+		page.url.searchParams.get('token') ||
+		cart.qrToken ||
+		(typeof localStorage !== 'undefined' ? localStorage.getItem('last_qr_token') : '') ||
+		''
+	);
+
+	const orderMenuUrl = $derived(
+		qrToken ? `/order?token=${encodeURIComponent(qrToken)}&new_order=true` : '/order?new_order=true'
+	);
 
 	// Proof of Payment State
 	let proofImage = $state<string | null>(null);
@@ -305,8 +318,9 @@
 	<header class="bg-white border-b border-slate-200/80 px-4 py-3.5 sticky top-0 z-30">
 		<div class="max-w-md mx-auto flex items-center justify-between">
 			<a
-				href="/order"
+				href={orderMenuUrl}
 				class="w-8 h-8 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center hover:bg-slate-200"
+				title="Kembali ke Pilihan Menu"
 			>
 				<ArrowLeft class="w-4 h-4" />
 			</a>
@@ -315,6 +329,7 @@
 				type="button"
 				onclick={loadOrder}
 				class="w-8 h-8 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center hover:bg-slate-200"
+				title="Perbarui Status"
 			>
 				<RefreshCw class="w-4 h-4" />
 			</button>
@@ -332,7 +347,7 @@
 				<AlertCircle class="w-12 h-12 text-red-500 mx-auto mb-2" />
 				<h2 class="font-bold text-slate-900 text-base">Pesanan Tidak Ditemukan</h2>
 				<p class="text-xs text-slate-500 mt-1 mb-4">{error}</p>
-				<a href="/order" class="inline-block text-xs font-bold text-orange-600">Kembali ke Beranda</a>
+				<a href={orderMenuUrl} class="inline-block text-xs font-bold text-orange-600">Pilih Menu Restoran</a>
 			</div>
 		{:else if order}
 			<!-- Order Header Card -->
@@ -353,6 +368,124 @@
 						<div class="text-lg font-extrabold text-white font-['Outfit']">{formatRupiah(order.total)}</div>
 					</div>
 				</div>
+			</div>
+
+			<!-- Status Memasak / Dapur Highlight Card (Menampilkan secara jelas apakah sedang dimasak atau belum) -->
+			<div class="rounded-3xl p-4.5 border shadow-sm transition-all {
+				order.status === 'PREPARING'
+					? 'bg-linear-to-r from-orange-500/15 via-amber-500/10 to-orange-500/5 border-orange-500/40 text-orange-950'
+					: order.status === 'CONFIRMED'
+					? 'bg-linear-to-r from-blue-500/15 via-indigo-500/10 to-blue-500/5 border-blue-500/40 text-blue-950'
+					: order.status === 'WAITING_PAYMENT'
+					? 'bg-linear-to-r from-amber-500/15 via-yellow-500/10 to-amber-500/5 border-amber-500/40 text-amber-950'
+					: order.status === 'READY'
+					? 'bg-linear-to-r from-emerald-500/15 via-teal-500/10 to-emerald-500/5 border-emerald-500/40 text-emerald-950'
+					: 'bg-white border-slate-200 text-slate-800'
+			}">
+				<div class="flex items-center gap-3.5">
+					<div class="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 shadow-sm {
+						order.status === 'PREPARING'
+							? 'bg-orange-600 text-white animate-pulse'
+							: order.status === 'CONFIRMED'
+							? 'bg-blue-600 text-white'
+							: order.status === 'WAITING_PAYMENT'
+							? 'bg-amber-600 text-white'
+							: order.status === 'READY'
+							? 'bg-emerald-600 text-white'
+							: 'bg-slate-700 text-white'
+					}">
+						{#if order.status === 'PREPARING'}
+							<ChefHat class="w-6 h-6 animate-bounce" />
+						{:else if order.status === 'CONFIRMED'}
+							<Clock class="w-6 h-6" />
+						{:else if order.status === 'WAITING_PAYMENT'}
+							<Wallet class="w-6 h-6" />
+						{:else if order.status === 'READY'}
+							<BellRing class="w-6 h-6 animate-bounce" />
+						{:else}
+							<Sparkles class="w-6 h-6" />
+						{/if}
+					</div>
+
+					<div class="min-w-0 flex-1">
+						<div class="flex items-center gap-2 flex-wrap">
+							<span class="text-xs uppercase tracking-wider font-extrabold {
+								order.status === 'PREPARING' ? 'text-orange-700' :
+								order.status === 'CONFIRMED' ? 'text-blue-700' :
+								order.status === 'WAITING_PAYMENT' ? 'text-amber-800' :
+								order.status === 'READY' ? 'text-emerald-700' : 'text-slate-600'
+							}">
+								Proses Dapur
+							</span>
+							<span class="text-[10px] font-black px-2 py-0.5 rounded-full {
+								order.status === 'PREPARING' ? 'bg-orange-500 text-white' :
+								order.status === 'CONFIRMED' ? 'bg-blue-600 text-white' :
+								order.status === 'WAITING_PAYMENT' ? 'bg-amber-500 text-white' :
+								order.status === 'READY' ? 'bg-emerald-600 text-white' : 'bg-slate-500 text-white'
+							}">
+								{order.status === 'PREPARING' ? 'SEDANG DIMASAK' :
+								 order.status === 'CONFIRMED' ? 'BELUM DIMASAK' :
+								 order.status === 'WAITING_PAYMENT' ? 'BELUM DIMASAK' :
+								 order.status === 'READY' ? 'SUDAH MATANG & SIAP' : 'SELESAI'}
+							</span>
+						</div>
+
+						<h3 class="font-extrabold text-sm text-slate-900 mt-0.5 leading-snug font-['Outfit']">
+							{#if order.status === 'PREPARING'}
+								🍳 Sedang Dimasak oleh Chef
+							{:else if order.status === 'CONFIRMED'}
+								📋 Menunggu Giliran Masak (Antrean Dapur)
+							{:else if order.status === 'WAITING_PAYMENT'}
+								💳 Menunggu Pembayaran Selesai
+							{:else if order.status === 'READY'}
+								🍽️ Hidangan Siap Diantar ke Meja
+							{:else if order.status === 'COMPLETED'}
+								✨ Pesanan Selesai Diantar
+							{:else}
+								Pesanan Dibatalkan
+							{/if}
+						</h3>
+
+						<p class="text-xs text-slate-600 mt-0.5 leading-relaxed">
+							{#if order.status === 'PREPARING'}
+								Chef sedang menyiapkan hidangan segar untuk meja Anda. Mohon tunggu ya!
+							{:else if order.status === 'CONFIRMED'}
+								Pesanan sudah diterima dapur dan sedang menunggu giliran untuk dimasak.
+							{:else if order.status === 'WAITING_PAYMENT'}
+								Pesanan akan langsung dimasak segera setelah pembayaran Anda diselesaikan.
+							{:else if order.status === 'READY'}
+								Makanan dan minuman sudah matang dan sedang diantar ke meja Anda.
+							{:else if order.status === 'COMPLETED'}
+								Semua hidangan sudah disajikan. Selamat menikmati santapan Anda!
+							{:else}
+								Pesanan ini telah dibatalkan.
+							{/if}
+						</p>
+					</div>
+				</div>
+			</div>
+
+			<!-- Action Card: Tetap Masih Bisa Memesan Menu Baru Lagi di Sini -->
+			<div class="bg-linear-to-r from-orange-50 via-amber-50 to-orange-50/50 rounded-3xl p-4 border border-orange-200 shadow-xs flex items-center justify-between gap-3">
+				<div class="flex items-center gap-3 min-w-0">
+					<div class="w-10 h-10 rounded-2xl bg-orange-600 text-white flex items-center justify-center shrink-0 shadow-md shadow-orange-500/20">
+						<UtensilsCrossed class="w-5 h-5" />
+					</div>
+					<div class="min-w-0">
+						<h4 class="font-bold text-xs text-slate-900">Ingin Tambah Pesanan Lain?</h4>
+						<p class="text-[11px] text-slate-500 truncate mt-0.5">
+							Pesan menu makanan atau minuman baru untuk meja ini
+						</p>
+					</div>
+				</div>
+
+				<a
+					href={orderMenuUrl}
+					class="shrink-0 bg-orange-600 hover:bg-orange-700 active:scale-95 text-white font-extrabold text-xs px-3.5 py-2.5 rounded-xl shadow-md shadow-orange-500/25 flex items-center gap-1.5 transition-all"
+				>
+					<Plus class="w-4 h-4" />
+					<span>Pesan Lagi</span>
+				</a>
 			</div>
 
 			<!-- Payment Method & Instructions (If Waiting Payment) -->
@@ -475,14 +608,14 @@
 														{proofFileName || 'bukti-pembayaran.jpg'}
 													</p>
 													{#if isUploadingProof}
-														<span class="inline-flex items-center gap-1 text-[10px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full font-bold border border-amber-200">
-															<RefreshCw class="w-2.5 h-2.5 animate-spin text-amber-600" />
-															Mengunggah ke GDrive...
+														<span class="inline-flex items-center gap-1 text-[10px] text-orange-700 bg-orange-50 px-2 py-0.5 rounded-full font-bold border border-orange-200">
+															<RefreshCw class="w-2.5 h-2.5 animate-spin text-orange-600" />
+															Memproses foto bukti...
 														</span>
-													{:else if gdriveFileUrl}
+													{:else if proofImage}
 														<span class="inline-flex items-center gap-1 text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full font-bold border border-emerald-200">
 															<CheckCircle2 class="w-2.5 h-2.5 text-emerald-600" />
-															Tersimpan di GDrive
+															Foto Siap Dikirim
 														</span>
 													{/if}
 												</div>
@@ -498,17 +631,6 @@
 														<Eye class="w-3.5 h-3.5" />
 														Lihat Foto
 													</button>
-													{#if gdriveFileUrl}
-														<span class="text-slate-200">&bull;</span>
-														<a
-															href={gdriveFileUrl}
-															target="_blank"
-															rel="noopener noreferrer"
-															class="text-[11px] font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1"
-														>
-															Folder GDrive
-														</a>
-													{/if}
 													<span class="text-slate-200">&bull;</span>
 													<label class="text-[11px] font-bold text-slate-600 hover:text-slate-900 cursor-pointer">
 														<span>Ganti Foto</span>
@@ -886,6 +1008,16 @@
 						<span>Total</span>
 						<span class="text-orange-600 font-extrabold font-['Outfit']">{formatRupiah(order.total)}</span>
 					</div>
+				</div>
+
+				<div class="pt-2">
+					<a
+						href={orderMenuUrl}
+						class="w-full bg-white hover:bg-orange-50 active:scale-[0.98] border-2 border-dashed border-orange-300 hover:border-orange-500 text-orange-600 font-bold py-3.5 px-4 rounded-2xl text-xs flex items-center justify-center gap-2 shadow-xs transition-all"
+					>
+						<Plus class="w-4 h-4 text-orange-600" />
+						<span>Pesan Menu Baru Lagi untuk Meja Ini</span>
+					</a>
 				</div>
 			</div>
 		{/if}

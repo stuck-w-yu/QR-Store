@@ -34,9 +34,15 @@
 			// 2. Submit order to backend (Rule 2 & 54: Backend calculates final prices)
 			const orderResult = await api.post<{ id: string; order_number: string; total: number }>('/public/orders', payload);
 
-			// 3. Clear cart and navigate to live tracking page
+			// 3. Clear cart and persist active order for this table
+			const currentToken = cart.qrToken;
+			try {
+				localStorage.setItem(`active_order_${currentToken}`, orderResult.id);
+				localStorage.setItem('last_qr_token', currentToken);
+			} catch (_) {}
+
 			cart.clear();
-			goto(`/order/status/${orderResult.id}`);
+			goto(`/order/status/${orderResult.id}?token=${encodeURIComponent(currentToken)}`);
 		} catch (err: any) {
 			errorMessage = err?.message || 'Gagal memproses pesanan. Silakan coba lagi.';
 		} finally {
@@ -50,7 +56,7 @@
 	<header class="sticky top-0 z-30 bg-white/90 backdrop-blur-md border-b border-slate-200/80 px-4 py-3.5">
 		<div class="max-w-lg mx-auto flex items-center justify-between">
 			<a
-				href="/order?token={cart.qrToken}"
+				href="/order?token={cart.qrToken}&new_order=true"
 				class="w-9 h-9 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center hover:bg-slate-200 transition-colors"
 			>
 				<ArrowLeft class="w-4 h-4" />
@@ -81,7 +87,7 @@
 				<h2 class="font-bold text-slate-800 text-base mb-1">Keranjang Masih Kosong</h2>
 				<p class="text-xs text-slate-500 mb-6">Pilih menu favorit Anda dan tambahkan ke keranjang.</p>
 				<a
-					href="/order?token={cart.qrToken}"
+					href="/order?token={cart.qrToken}&new_order=true"
 					class="inline-block bg-orange-600 text-white font-semibold text-xs px-5 py-2.5 rounded-xl shadow-md"
 				>
 					Kembali ke Menu
