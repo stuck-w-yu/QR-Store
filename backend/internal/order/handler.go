@@ -16,6 +16,12 @@ type SubmitProofRequest struct {
 	ProofURL string `json:"proof_url" binding:"required"`
 }
 
+type UpdateOrderDetailsRequest struct {
+	Notes         *string        `json:"notes"`
+	Status        *Status        `json:"status"`
+	PaymentStatus *PaymentStatus `json:"payment_status"`
+}
+
 type Handler struct {
 	service     Service
 	authService auth.Service
@@ -38,7 +44,9 @@ func (h *Handler) RegisterRoutes(r *gin.RouterGroup) {
 		orderGroup.GET("", h.ListOrders)
 		orderGroup.GET("/:id", h.GetOrder)
 		orderGroup.PATCH("/:id/status", auth.RequireRoles(auth.RoleSuperadmin, auth.RoleOwner, auth.RoleAdmin, auth.RoleCashier), h.UpdateStatus)
+		orderGroup.PATCH("/:id", auth.RequireRoles(auth.RoleSuperadmin, auth.RoleOwner, auth.RoleAdmin, auth.RoleCashier), h.UpdateOrderDetails)
 		orderGroup.POST("/:id/cancel", auth.RequireRoles(auth.RoleSuperadmin, auth.RoleOwner, auth.RoleAdmin, auth.RoleCashier), h.CancelOrder)
+		orderGroup.DELETE("/:id", auth.RequireRoles(auth.RoleSuperadmin, auth.RoleOwner, auth.RoleAdmin, auth.RoleCashier), h.DeleteOrder)
 		orderGroup.GET("/analytics/today", auth.RequireRoles(auth.RoleSuperadmin, auth.RoleOwner, auth.RoleAdmin, auth.RoleCashier), h.GetTodayAnalytics)
 	}
 }
@@ -170,6 +178,45 @@ func (h *Handler) CancelOrder(c *gin.Context) {
 	}
 
 	response.OK(c, gin.H{"cancelled": true}, "Order cancelled successfully")
+}
+
+func (h *Handler) UpdateOrderDetails(c *gin.Context) {
+	id := c.Param("id")
+	restoID, _ := c.Get(auth.CtxRestaurantID)
+
+	var req UpdateOrderDetailsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "INVALID_REQUEST", err.Error())
+		return
+	}
+
+	o, err := h.service.UpdateOrderDetails(c.Request.Context(), id, restoID.(string), req.Notes, req.Status, req.PaymentStatus)
+	if err != nil {
+		if errors.Is(err, ErrOrderNotFound) {
+			response.NotFound(c, "ORDER_NOT_FOUND", "Order not found")
+			return
+		}
+		response.InternalServerError(c, "UPDATE_DETAILS_FAILED", err.Error())
+		return
+	}
+
+	response.OK(c, o, "Order details updated successfully")
+}
+
+func (h *Handler) DeleteOrder(c *gin.Context) {
+	id := c.Param("id")
+	restoID, _ := c.Get(auth.CtxRestaurantID)
+
+	if err := h.service.DeleteOrder(c.Request.Context(), id, restoID.(string)); err != nil {
+		if errors.Is(err, ErrOrderNotFound) {
+			response.NotFound(c, "ORDER_NOT_FOUND", "Order not found")
+			return
+		}
+		response.InternalServerError(c, "DELETE_ORDER_FAILED", err.Error())
+		return
+	}
+
+	response.OK(c, gin.H{"deleted": true}, "Order deleted successfully")
 }
 
 func (h *Handler) GetTodayAnalytics(c *gin.Context) {

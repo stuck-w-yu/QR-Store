@@ -35,23 +35,29 @@ const (
 )
 
 func IsValidTransition(from, to Status) bool {
+	if from == to {
+		return true
+	}
 	switch from {
 	case StatusDraft:
 		return to == StatusPendingConfirmation || to == StatusWaitingPayment || to == StatusCancelled
 	case StatusPendingConfirmation, StatusWaitingPayment:
 		return to == StatusConfirmed || to == StatusCancelled
 	case StatusConfirmed:
-		return to == StatusPreparing || to == StatusCancelled
+		return to == StatusPreparing || to == StatusCancelled || to == StatusWaitingPayment
 	case StatusPreparing:
-		return to == StatusReady || to == StatusCancelled
+		return to == StatusReady || to == StatusCancelled || to == StatusConfirmed
 	case StatusReady:
-		return to == StatusServed || to == StatusCompleted || to == StatusCancelled
+		return to == StatusServed || to == StatusCompleted || to == StatusCancelled || to == StatusPreparing
 	case StatusServed:
-		return to == StatusCompleted || to == StatusCancelled
-	case StatusCompleted, StatusCancelled:
-		return false // terminal states
+		return to == StatusCompleted || to == StatusCancelled || to == StatusReady
+	case StatusCompleted:
+		return to == StatusCancelled || to == StatusServed
+	case StatusCancelled:
+		// Izinkan kasir memulihkan pesanan yang dibatalkan
+		return to == StatusWaitingPayment || to == StatusConfirmed || to == StatusPreparing
 	default:
-		return false
+		return true
 	}
 }
 

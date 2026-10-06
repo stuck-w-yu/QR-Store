@@ -8,15 +8,24 @@
 		XCircle, AlertCircle, Printer, ArrowRight, Banknote,
 		Sparkles, Utensils, User, MapPin, Volume2, VolumeX,
 		Check, Receipt, DollarSign, Calculator, ChevronRight,
-		Camera, Eye, Image as ImageIcon
+		Camera, Eye, Image as ImageIcon, Trash2, SlidersHorizontal,
+		RotateCcw, AlertTriangle, Plus, ShieldAlert
 	} from '@lucide/svelte';
 
 	let orders = $state<Order[]>([]);
 	let loading = $state(true);
 	let searchQuery = $state('');
-	let activeTab = $state<'PENDING' | 'PAID_TODAY' | 'ALL'>('PENDING');
+	let activeTab = $state<'PENDING' | 'PAID_TODAY' | 'CANCELLED' | 'ALL'>('PENDING');
 	let soundEnabled = $state(true);
 	let wsConnected = $state(false);
+
+	// CRUD Edit Order State
+	let editModalOrder = $state<Order | null>(null);
+	let editStatus = $state<string>('');
+	let editPaymentStatus = $state<string>('');
+	let editNotes = $state<string>('');
+	let submittingEdit = $state(false);
+	let deletingOrderId = $state<string | null>(null);
 
 	// Proof of Payment Inspection State
 	let viewProofModalData = $state<{
@@ -144,11 +153,18 @@
 						'PAYMENT_PAID',
 						'PAYMENT_CONFIRMED',
 						'order.confirmed',
-						'PAYMENT_PROOF_SUBMITTED'
+						'PAYMENT_PROOF_SUBMITTED',
+						'ORDER_DELETED'
 					];
 					if (relevantEvents.includes(msg.event)) {
 						if (msg.event === 'NEW_ORDER_PENDING' || msg.event === 'order.created' || msg.event === 'PAYMENT_PROOF_SUBMITTED') {
 							playChime();
+						}
+						if (msg.event === 'ORDER_DELETED') {
+							const delId = msg.data?.order_id;
+							if (delId) {
+								orders = orders.filter((o) => o.id !== delId);
+							}
 						}
 						// Direct update in state if order object is supplied
 						if (msg.data?.order) {
@@ -187,20 +203,26 @@
 
 	// Filter orders
 	let pendingOrders = $derived(
-		orders.filter((o) => o.status === 'WAITING_PAYMENT' || o.payment_status === 'UNPAID')
+		orders.filter((o) => (o.status === 'WAITING_PAYMENT' || o.payment_status === 'UNPAID') && o.status !== 'CANCELLED')
 	);
 
 	let paidTodayOrders = $derived(
 		orders.filter((o) => o.payment_status === 'PAID' && o.status !== 'CANCELLED')
 	);
 
+	let cancelledOrders = $derived(
+		orders.filter((o) => o.status === 'CANCELLED')
+	);
+
 	let displayedOrders = $derived(
 		orders.filter((o) => {
 			// Tab filtering
 			if (activeTab === 'PENDING') {
-				if (o.status !== 'WAITING_PAYMENT' && o.payment_status !== 'UNPAID') return false;
+				if (o.status === 'CANCELLED' || (o.status !== 'WAITING_PAYMENT' && o.payment_status !== 'UNPAID')) return false;
 			} else if (activeTab === 'PAID_TODAY') {
 				if (o.payment_status !== 'PAID' || o.status === 'CANCELLED') return false;
+			} else if (activeTab === 'CANCELLED') {
+				if (o.status !== 'CANCELLED') return false;
 			}
 
 			// Search filtering
@@ -292,6 +314,62 @@
 		}
 	}
 
+	function openEditModal(o: Order) {
+		editModalOrder = o;
+		editStatus = o.status || 'WAITING_PAYMENT';
+		editPaymentStatus = (o.payment_status as string) || 'UNPAID';
+		editNotes = o.notes || '';
+	}
+
+	async function saveEditOrder() {
+		if (!editModalOrder) return;
+		submittingEdit = true;
+		try {
+			await api.patch(`/orders/${editModalOrder.id}`, {
+				status: editStatus,
+				payment_status: editPaymentStatus,
+				notes: editNotes ? editNotes.trim() : null
+			});
+			editModalOrder = null;
+			await loadOrders();
+		} catch (e: any) {
+			alert(e?.message || 'Gagal menyimpan perubahan pesanan');
+		} finally {
+			submittingEdit = false;
+		}
+	}
+
+	async function handleDeleteOrder(order: Order) {
+		if (!confirm(`Hapus permanen pesanan #${order.order_number}? Seluruh data pesanan nyangkut ini akan dihapus bersih dari database.`)) return;
+		deletingOrderId = order.id;
+		try {
+			await api.delete(`/orders/${order.id}`);
+			if (editModalOrder?.id === order.id) {
+				editModalOrder = null;
+			}
+			orders = orders.filter((o) => o.id !== order.id);
+			await loadOrders();
+		} catch (e: any) {
+			alert(e?.message || 'Gagal menghapus pesanan');
+		} finally {
+			deletingOrderId = null;
+		}
+	}
+
+	async function handleRestoreOrder(order: Order, targetStatus: 'WAITING_PAYMENT' | 'CONFIRMED' = 'CONFIRMED') {
+		const targetLabel = targetStatus === 'CONFIRMED' ? 'Diterima Dapur (Sudah Lunas)' : 'Menunggu Pembayaran';
+		if (!confirm(`Pulihkan pesanan #${order.order_number} kembali menjadi "${targetLabel}"?`)) return;
+		try {
+			await api.patch(`/orders/${order.id}`, {
+				status: targetStatus,
+				payment_status: targetStatus === 'CONFIRMED' ? 'PAID' : 'UNPAID'
+			});
+			await loadOrders();
+		} catch (e: any) {
+			alert(e?.message || 'Gagal memulihkan pesanan');
+		}
+	}
+
 	function printReceipt() {
 		window.print();
 	}
@@ -378,11 +456,21 @@
 			<button
 				type="button"
 				onclick={loadOrders}
-				class="p-2 bg-white hover:bg-slate-50 text-slate-700 rounded-xl border border-slate-200 transition-colors shadow-xs"
+				class="p-2 bg-white hover:bg-slate-50 text-slate-700 rounded-xl border border-slate-200 transition-colors shadow-xs cursor-pointer"
 				title="Muat Ulang Data"
 			>
 				<RefreshCw class="w-4 h-4 {loading ? 'animate-spin' : ''}" />
 			</button>
+
+			<!-- Quick POS Shortcut -->
+			<a
+				href="/admin/pos"
+				class="px-3.5 py-1.5 bg-orange-600 hover:bg-orange-700 active:scale-95 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-md shadow-orange-600/20 transition-all"
+				title="Buka Kasir POS untuk Tambah Pesanan Baru"
+			>
+				<Plus class="w-3.5 h-3.5" />
+				<span>Buat Pesanan Baru</span>
+			</a>
 		</div>
 	</div>
 
@@ -427,13 +515,26 @@
 				<span>Otoritas Petugas</span>
 				<User class="w-4 h-4 text-blue-500" />
 			</div>
-			<div class="mt-3">
-				<div class="text-sm font-black text-slate-900">
-					{auth.user?.name || 'Administrator'}
+			<div class="mt-3 flex items-center justify-between">
+				<div>
+					<div class="text-sm font-black text-slate-900">
+						{auth.user?.name || 'Administrator'}
+					</div>
+					<div class="text-xs text-slate-500 font-medium">
+						Role: <span class="font-bold text-orange-600">{auth.user?.role || 'ADMIN'}</span> (Akses Penuh Kasir)
+					</div>
 				</div>
-				<div class="text-xs text-slate-500 font-medium">
-					Role: <span class="font-bold text-orange-600">{auth.user?.role || 'ADMIN'}</span> (Akses Penuh Kasir)
-				</div>
+				{#if cancelledOrders.length > 0}
+					<button
+						type="button"
+						onclick={() => (activeTab = 'CANCELLED')}
+						class="px-2.5 py-1 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold border border-rose-200 transition-colors flex items-center gap-1 cursor-pointer"
+						title="Lihat pesanan yang dibatalkan / nyangkut"
+					>
+						<XCircle class="w-3.5 h-3.5 text-rose-600" />
+						<span>{cancelledOrders.length} Batal</span>
+					</button>
+				{/if}
 			</div>
 		</div>
 	</div>
@@ -441,11 +542,11 @@
 	<!-- Controls & Filter Tabs -->
 	<div class="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
 		<!-- Tabs -->
-		<div class="flex items-center gap-1.5 p-1 bg-slate-200/70 rounded-2xl w-full sm:w-auto">
+		<div class="flex items-center gap-1.5 p-1 bg-slate-200/70 rounded-2xl w-full sm:w-auto overflow-x-auto">
 			<button
 				type="button"
 				onclick={() => (activeTab = 'PENDING')}
-				class="flex-1 sm:flex-initial px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 {activeTab === 'PENDING'
+				class="flex-1 sm:flex-initial px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 whitespace-nowrap cursor-pointer {activeTab === 'PENDING'
 					? 'bg-white text-orange-600 shadow-xs'
 					: 'text-slate-600 hover:text-slate-900'}"
 			>
@@ -460,7 +561,7 @@
 			<button
 				type="button"
 				onclick={() => (activeTab = 'PAID_TODAY')}
-				class="flex-1 sm:flex-initial px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 {activeTab === 'PAID_TODAY'
+				class="flex-1 sm:flex-initial px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 whitespace-nowrap cursor-pointer {activeTab === 'PAID_TODAY'
 					? 'bg-white text-slate-900 shadow-xs'
 					: 'text-slate-600 hover:text-slate-900'}"
 			>
@@ -470,8 +571,23 @@
 
 			<button
 				type="button"
+				onclick={() => (activeTab = 'CANCELLED')}
+				class="flex-1 sm:flex-initial px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 whitespace-nowrap cursor-pointer {activeTab === 'CANCELLED'
+					? 'bg-white text-rose-600 shadow-xs'
+					: 'text-slate-600 hover:text-slate-900'}"
+			>
+				<span>Dibatalkan</span>
+				{#if cancelledOrders.length > 0}
+					<span class="px-2 py-0.5 rounded-full text-[10px] bg-rose-100 text-rose-700 font-black">
+						{cancelledOrders.length}
+					</span>
+				{/if}
+			</button>
+
+			<button
+				type="button"
 				onclick={() => (activeTab = 'ALL')}
-				class="flex-1 sm:flex-initial px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 {activeTab === 'ALL'
+				class="flex-1 sm:flex-initial px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 whitespace-nowrap cursor-pointer {activeTab === 'ALL'
 					? 'bg-white text-slate-900 shadow-xs'
 					: 'text-slate-600 hover:text-slate-900'}"
 			>
@@ -514,7 +630,9 @@
 	{:else}
 		<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
 			{#each displayedOrders as order (order.id)}
-				<div class="bg-white rounded-3xl border transition-all duration-200 overflow-hidden flex flex-col justify-between {order.status === 'WAITING_PAYMENT' || order.payment_status === 'UNPAID'
+				<div class="bg-white rounded-3xl border transition-all duration-200 overflow-hidden flex flex-col justify-between {order.status === 'CANCELLED'
+					? 'border-rose-300 bg-rose-50/15 shadow-xs'
+					: order.status === 'WAITING_PAYMENT' || order.payment_status === 'UNPAID'
 					? 'border-amber-300 shadow-md shadow-amber-500/5 hover:border-amber-400'
 					: 'border-slate-200/80 shadow-xs hover:border-slate-300'}">
 					
@@ -531,7 +649,12 @@
 								</span>
 							</div>
 
-							{#if order.payment_status === 'PAID'}
+							{#if order.status === 'CANCELLED'}
+								<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-700 border border-rose-200">
+									<XCircle class="w-3 h-3" />
+									DIBATALKAN
+								</span>
+							{:else if order.payment_status === 'PAID'}
 								<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
 									<CheckCircle2 class="w-3 h-3" />
 									LUNAS
@@ -547,6 +670,36 @@
 						<div class="flex items-center justify-between text-[11px] text-slate-400 font-medium">
 							<span>Waktu pesan: {new Date(order.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} WIB</span>
 							<span class="text-orange-600 font-bold">{getElapsedMinutes(order.created_at.toString())} mnt lalu</span>
+						</div>
+
+						<!-- Status Alur Dapur / Pesanan -->
+						<div class="pt-2 border-t border-slate-200/60 flex items-center justify-between text-[11px]">
+							<span class="text-slate-500 font-medium">
+								Alur: 
+								<span class="font-bold {
+									order.status === 'CANCELLED' ? 'text-rose-600' :
+									order.status === 'PREPARING' ? 'text-orange-600' :
+									order.status === 'READY' ? 'text-emerald-600' :
+									order.status === 'COMPLETED' ? 'text-slate-700' :
+									order.status === 'CONFIRMED' ? 'text-blue-600' : 'text-amber-600'
+								}">
+									{order.status === 'CANCELLED' ? 'Dibatalkan' :
+									 order.status === 'PREPARING' ? 'Sedang Dimasak' :
+									 order.status === 'READY' ? 'Siap Diantar' :
+									 order.status === 'COMPLETED' ? 'Selesai' :
+									 order.status === 'CONFIRMED' ? 'Diteruskan ke Dapur' : 'Menunggu Bayar'}
+								</span>
+							</span>
+
+							<button
+								type="button"
+								onclick={() => openEditModal(order)}
+								class="text-[11px] text-slate-500 hover:text-orange-600 font-bold flex items-center gap-1 cursor-pointer transition-colors"
+								title="Kelola / Edit Status Pesanan"
+							>
+								<SlidersHorizontal class="w-3 h-3" />
+								<span>Kelola</span>
+							</button>
 						</div>
 					</div>
 
@@ -620,7 +773,52 @@
 						{/if}
 
 						<!-- Action Buttons -->
-						{#if order.payment_status !== 'PAID' && order.status !== 'CANCELLED'}
+						{#if order.status === 'CANCELLED'}
+							<!-- Tampilan Aksi untuk Pesanan Dibatalkan / Nyangkut -->
+							<div class="space-y-2 pt-1">
+								<div class="p-2 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 text-[11px] flex items-center justify-between">
+									<span class="font-bold flex items-center gap-1">
+										<XCircle class="w-3.5 h-3.5 text-rose-600" />
+										Pesanan Dibatalkan
+									</span>
+									<span class="text-[10px] text-rose-600 font-medium">Data bisa dibersihkan</span>
+								</div>
+								<div class="flex items-center gap-2">
+									<button
+										type="button"
+										onclick={() => handleRestoreOrder(order)}
+										class="flex-1 py-2 px-2.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-xl font-bold text-xs transition-colors flex items-center justify-center gap-1 cursor-pointer"
+										title="Pulihkan pesanan ini kembali ke dapur"
+									>
+										<RotateCcw class="w-3.5 h-3.5 text-blue-600" />
+										<span>Pulihkan</span>
+									</button>
+									<button
+										type="button"
+										onclick={() => handleDeleteOrder(order)}
+										disabled={deletingOrderId === order.id}
+										class="flex-1 py-2 px-2.5 bg-rose-600 hover:bg-rose-700 active:scale-98 text-white rounded-xl font-bold text-xs shadow-xs transition-all flex items-center justify-center gap-1 cursor-pointer disabled:opacity-50"
+										title="Hapus permanen pesanan nyangkut ini"
+									>
+										{#if deletingOrderId === order.id}
+											<RefreshCw class="w-3.5 h-3.5 animate-spin" />
+											<span>Hapus...</span>
+										{:else}
+											<Trash2 class="w-3.5 h-3.5" />
+											<span>Hapus</span>
+										{/if}
+									</button>
+									<button
+										type="button"
+										onclick={() => openEditModal(order)}
+										class="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors cursor-pointer"
+										title="Kelola Lengkap"
+									>
+										<SlidersHorizontal class="w-3.5 h-3.5" />
+									</button>
+								</div>
+							</div>
+						{:else if order.payment_status !== 'PAID'}
 							<div class="flex items-center gap-2">
 								<button
 									type="button"
@@ -632,9 +830,17 @@
 								</button>
 								<button
 									type="button"
+									onclick={() => openEditModal(order)}
+									class="p-2.5 rounded-2xl bg-white hover:bg-slate-100 text-slate-600 border border-slate-200 transition-colors cursor-pointer"
+									title="Kelola / Edit Pesanan"
+								>
+									<SlidersHorizontal class="w-4 h-4" />
+								</button>
+								<button
+									type="button"
 									onclick={() => handleCancelOrder(order.id)}
 									disabled={cancelSubmitting}
-									class="p-2.5 rounded-2xl bg-white hover:bg-rose-50 text-slate-400 hover:text-rose-600 border border-slate-200 transition-colors"
+									class="p-2.5 rounded-2xl bg-white hover:bg-rose-50 text-slate-400 hover:text-rose-600 border border-slate-200 transition-colors cursor-pointer"
 									title="Batalkan Pesanan Ini"
 								>
 									<XCircle class="w-4 h-4" />
@@ -642,24 +848,42 @@
 							</div>
 						{:else}
 							<div class="flex items-center justify-between text-xs text-slate-500 font-semibold pt-1">
-								<span class="flex items-center gap-1 text-emerald-600">
+								<span class="flex items-center gap-1 text-emerald-600 font-bold">
 									<CheckCircle2 class="w-4 h-4" />
-									Sudah Diteruskan ke Dapur
+									{#if order.status === 'COMPLETED'}
+										Selesai Diantar
+									{:else if order.status === 'READY'}
+										Siap Diantar
+									{:else if order.status === 'PREPARING'}
+										Sedang Dimasak
+									{:else}
+										Diteruskan ke Dapur
+									{/if}
 								</span>
-								<button
-									type="button"
-									onclick={() => {
-										successModalData = {
-											order: order,
-											paidAmount: order.total,
-											change: 0,
-											paymentMethod: order.payment_method || 'CASH'
-										};
-									}}
-									class="text-orange-600 hover:underline font-bold text-[11px]"
-								>
-									Lihat Struk
-								</button>
+								<div class="flex items-center gap-2">
+									<button
+										type="button"
+										onclick={() => {
+											successModalData = {
+												order: order,
+												paidAmount: order.total,
+												change: 0,
+												paymentMethod: order.payment_method || 'CASH'
+											};
+										}}
+										class="text-orange-600 hover:underline font-bold text-[11px] cursor-pointer"
+									>
+										Lihat Struk
+									</button>
+									<button
+										type="button"
+										onclick={() => openEditModal(order)}
+										class="p-1.5 rounded-lg hover:bg-slate-200 text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
+										title="Kelola Status Pesanan"
+									>
+										<SlidersHorizontal class="w-3.5 h-3.5" />
+									</button>
+								</div>
 							</div>
 						{/if}
 					</div>
@@ -1114,3 +1338,175 @@
 		</div>
 	</div>
 {/if}
+
+<!-- ==================== CRUD: KELOLA & EDIT STATUS PESANAN MODAL ==================== -->
+{#if editModalOrder}
+	<div class="fixed inset-0 bg-slate-950/75 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+		<div class="bg-white rounded-3xl p-6 sm:p-7 w-full max-w-lg space-y-5 shadow-2xl animate-in zoom-in-95 duration-150 max-h-[92vh] overflow-y-auto">
+			<!-- Modal Header -->
+			<div class="flex items-start justify-between pb-3 border-b border-slate-100">
+				<div>
+					<span class="text-[11px] font-bold text-orange-600 uppercase tracking-wider flex items-center gap-1">
+						<SlidersHorizontal class="w-3.5 h-3.5" />
+						Manajemen / CRUD Pesanan
+					</span>
+					<h2 class="text-lg font-black text-slate-900 font-['Outfit'] mt-0.5">
+						#{editModalOrder.order_number} &bull; {editModalOrder.table_name || `Meja ${editModalOrder.table_id || '?'}`}
+					</h2>
+					<p class="text-xs text-slate-400 font-medium">
+						Waktu: {new Date(editModalOrder.created_at).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })}
+					</p>
+				</div>
+				<button
+					type="button"
+					onclick={() => (editModalOrder = null)}
+					class="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center cursor-pointer transition-colors"
+				>
+					<XCircle class="w-5 h-5" />
+				</button>
+			</div>
+
+			<!-- Status Alur Pesanan -->
+			<div class="space-y-2">
+				<div class="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+					Ubah Status Alur Dapur / Pesanan:
+				</div>
+				<div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+					{#each [
+						{ key: 'WAITING_PAYMENT', label: 'Menunggu Bayar', color: 'border-amber-400 bg-amber-50 text-amber-800' },
+						{ key: 'CONFIRMED', label: 'Diteruskan Dapur', color: 'border-blue-400 bg-blue-50 text-blue-800' },
+						{ key: 'PREPARING', label: 'Sedang Dimasak', color: 'border-orange-400 bg-orange-50 text-orange-800' },
+						{ key: 'READY', label: 'Siap Diantar', color: 'border-emerald-400 bg-emerald-50 text-emerald-800' },
+						{ key: 'COMPLETED', label: 'Selesai', color: 'border-slate-400 bg-slate-100 text-slate-800' },
+						{ key: 'CANCELLED', label: 'Dibatalkan', color: 'border-rose-400 bg-rose-50 text-rose-800' }
+					] as st}
+						<button
+							type="button"
+							onclick={() => (editStatus = st.key)}
+							class="p-2.5 rounded-xl border text-left text-xs font-bold transition-all cursor-pointer {editStatus === st.key
+								? `${st.color} ring-2 ring-orange-500 shadow-xs font-black`
+								: 'border-slate-200 bg-white hover:bg-slate-50 text-slate-600'}"
+						>
+							<div class="flex items-center justify-between">
+								<span>{st.label}</span>
+								{#if editStatus === st.key}
+									<Check class="w-3.5 h-3.5 shrink-0" />
+								{/if}
+							</div>
+						</button>
+					{/each}
+				</div>
+			</div>
+
+			<!-- Status Pembayaran -->
+			<div class="space-y-2">
+				<div class="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+					Status Pembayaran Tagihan:
+				</div>
+				<div class="grid grid-cols-2 gap-2">
+					<button
+						type="button"
+						onclick={() => (editPaymentStatus = 'UNPAID')}
+						class="p-2.5 rounded-xl border text-xs font-bold transition-all cursor-pointer flex items-center justify-between {editPaymentStatus === 'UNPAID'
+							? 'border-amber-400 bg-amber-50 text-amber-900 ring-2 ring-amber-500 font-black'
+							: 'border-slate-200 bg-white hover:bg-slate-50 text-slate-600'}"
+					>
+						<span class="flex items-center gap-1.5">
+							<Clock class="w-3.5 h-3.5 text-amber-600" />
+							BELUM BAYAR (UNPAID)
+						</span>
+						{#if editPaymentStatus === 'UNPAID'}
+							<Check class="w-3.5 h-3.5 text-amber-700" />
+						{/if}
+					</button>
+
+					<button
+						type="button"
+						onclick={() => (editPaymentStatus = 'PAID')}
+						class="p-2.5 rounded-xl border text-xs font-bold transition-all cursor-pointer flex items-center justify-between {editPaymentStatus === 'PAID'
+							? 'border-emerald-400 bg-emerald-50 text-emerald-900 ring-2 ring-emerald-500 font-black'
+							: 'border-slate-200 bg-white hover:bg-slate-50 text-slate-600'}"
+					>
+						<span class="flex items-center gap-1.5">
+							<CheckCircle2 class="w-3.5 h-3.5 text-emerald-600" />
+							SUDAH LUNAS (PAID)
+						</span>
+						{#if editPaymentStatus === 'PAID'}
+							<Check class="w-3.5 h-3.5 text-emerald-700" />
+						{/if}
+					</button>
+				</div>
+			</div>
+
+			<!-- Catatan Meja -->
+			<div class="space-y-1.5">
+				<label for="edit-notes-input" class="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+					Catatan Meja / Pesanan:
+				</label>
+				<input
+					id="edit-notes-input"
+					type="text"
+					bind:value={editNotes}
+					placeholder="Catatan tambahan meja (opsional)..."
+					class="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs font-medium focus:outline-hidden focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition-all"
+				/>
+			</div>
+
+			<!-- Ringkasan Item Pesanan -->
+			<div class="p-3 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-2">
+				<div class="flex items-center justify-between text-xs font-bold text-slate-600 pb-1 border-b border-slate-200">
+					<span>Rincian Item ({editModalOrder.items?.length || 0})</span>
+					<span class="text-orange-600 font-black font-['Outfit']">{formatRupiah(editModalOrder.total)}</span>
+				</div>
+				<div class="max-h-32 overflow-y-auto space-y-1 pr-1 text-xs text-slate-700">
+					{#each (editModalOrder.items || []) as item}
+						<div class="flex items-center justify-between py-0.5">
+							<span class="truncate">{item.quantity}x {item.menu_name_snapshot}</span>
+							<span class="font-semibold text-slate-500 shrink-0">{formatRupiah(item.subtotal)}</span>
+						</div>
+					{/each}
+				</div>
+			</div>
+
+			<!-- Footer Actions -->
+			<div class="pt-2 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3">
+				<!-- Tombol Hapus Permanen (untuk pesanan nyangkut/spam) -->
+				<button
+					type="button"
+					onclick={() => handleDeleteOrder(editModalOrder!)}
+					disabled={deletingOrderId === editModalOrder.id}
+					class="w-full sm:w-auto px-3.5 py-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+					title="Hapus permanen pesanan nyangkut ini dari database"
+				>
+					<Trash2 class="w-3.5 h-3.5 text-rose-600" />
+					<span>Hapus Permanen Pesanan</span>
+				</button>
+
+				<div class="flex items-center gap-2 w-full sm:w-auto">
+					<button
+						type="button"
+						onclick={() => (editModalOrder = null)}
+						class="flex-1 sm:flex-initial px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs hover:bg-slate-100 transition-colors cursor-pointer"
+					>
+						Batal
+					</button>
+					<button
+						type="button"
+						onclick={saveEditOrder}
+						disabled={submittingEdit}
+						class="flex-1 sm:flex-initial px-5 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-700 active:scale-95 text-white font-bold text-xs shadow-md shadow-orange-600/25 transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+					>
+						{#if submittingEdit}
+							<RefreshCw class="w-3.5 h-3.5 animate-spin" />
+							<span>Menyimpan...</span>
+						{:else}
+							<Check class="w-3.5 h-3.5" />
+							<span>Simpan Perubahan</span>
+						{/if}
+					</button>
+				</div>
+			</div>
+		</div>
+	</div>
+{/if}
+

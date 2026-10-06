@@ -23,6 +23,8 @@ type Repository interface {
 	ListKitchenOrders(ctx context.Context, restaurantID string) ([]Order, error)
 	UpdateStatus(ctx context.Context, id string, newStatus Status, changedBy *string) error
 	UpdateProofURL(ctx context.Context, id string, proofURL string) error
+	Delete(ctx context.Context, id string, restaurantID string) error
+	UpdateDetails(ctx context.Context, id string, notes *string, status *Status, paymentStatus *PaymentStatus) error
 	GetOrderItems(ctx context.Context, orderID string) ([]OrderItem, error)
 	GetTodayStats(ctx context.Context, restaurantID string) (revenue int64, orderCount int, avgOrder int64, paidCount int, cancelledCount int, err error)
 }
@@ -345,6 +347,39 @@ func (r *repository) UpdateProofURL(ctx context.Context, id string, proofURL str
 	}
 	// Also update payments table if a payment record exists for this order
 	_, _ = r.pool.Exec(ctx, `UPDATE payments SET proof_url = $1, updated_at = NOW() WHERE order_id = $2`, proofURL, id)
+	return nil
+}
+
+func (r *repository) Delete(ctx context.Context, id string, restaurantID string) error {
+	tag, err := r.pool.Exec(ctx, `DELETE FROM orders WHERE id = $1 AND restaurant_id = $2`, id, restaurantID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrOrderNotFound
+	}
+	return nil
+}
+
+func (r *repository) UpdateDetails(ctx context.Context, id string, notes *string, status *Status, paymentStatus *PaymentStatus) error {
+	now := time.Now()
+	query := `
+		UPDATE orders
+		SET notes = COALESCE($1, notes),
+		    status = COALESCE($2, status),
+		    payment_status = COALESCE($3, payment_status),
+		    updated_at = $4,
+		    completed_at = CASE WHEN $2::varchar = 'COMPLETED' THEN $4 ELSE completed_at END,
+		    cancelled_at = CASE WHEN $2::varchar = 'CANCELLED' THEN $4 ELSE cancelled_at END
+		WHERE id = $5
+	`
+	tag, err := r.pool.Exec(ctx, query, notes, status, paymentStatus, now, id)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrOrderNotFound
+	}
 	return nil
 }
 

@@ -41,6 +41,8 @@ type Service interface {
 	ListKitchenOrders(ctx context.Context, restaurantID string) ([]Order, error)
 	UpdateOrderStatus(ctx context.Context, id string, newStatus Status, changedBy string) error
 	SubmitProofOfPayment(ctx context.Context, orderID string, proofURL string) (*Order, error)
+	DeleteOrder(ctx context.Context, id string, restaurantID string) error
+	UpdateOrderDetails(ctx context.Context, id string, restaurantID string, notes *string, status *Status, paymentStatus *PaymentStatus) (*Order, error)
 	GetTodayAnalytics(ctx context.Context, restaurantID string) (map[string]interface{}, error)
 }
 
@@ -276,4 +278,50 @@ func (s *service) GetTodayAnalytics(ctx context.Context, restaurantID string) (m
 		"today_cancelled":  cancelled,
 		"average_order":    avg,
 	}, nil
+}
+
+func (s *service) DeleteOrder(ctx context.Context, id string, restaurantID string) error {
+	o, _ := s.orderRepo.GetByID(ctx, id)
+	if err := s.orderRepo.Delete(ctx, id, restaurantID); err != nil {
+		return err
+	}
+
+	if s.hub != nil {
+		eventData := map[string]interface{}{
+			"order_id":      id,
+			"restaurant_id": restaurantID,
+			"deleted":       true,
+		}
+		if o != nil {
+			eventData["order_number"] = o.OrderNumber
+			eventData["table_id"] = o.TableID
+		}
+		s.hub.Publish(fmt.Sprintf("restaurant:%s:cashier", restaurantID), "ORDER_DELETED", eventData)
+		s.hub.Publish(fmt.Sprintf("restaurant:%s:kitchen", restaurantID), "ORDER_DELETED", eventData)
+		s.hub.Publish(fmt.Sprintf("order:%s", id), "ORDER_DELETED", eventData)
+	}
+	return nil
+}
+
+func (s *service) UpdateOrderDetails(ctx context.Context, id string, restaurantID string, notes *string, status *Status, paymentStatus *PaymentStatus) (*Order, error) {
+	if err := s.orderRepo.UpdateDetails(ctx, id, notes, status, paymentStatus); err != nil {
+		return nil, err
+	}
+
+	o, err := s.orderRepo.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	if s.hub != nil {
+		eventData := map[string]interface{}{
+			"order_id": o.ID,
+			"status":   o.Status,
+			"order":    o,
+		}
+		s.hub.Publish(fmt.Sprintf("restaurant:%s:cashier", restaurantID), "ORDER_STATUS_CHANGED", eventData)
+		s.hub.Publish(fmt.Sprintf("restaurant:%s:kitchen", restaurantID), "ORDER_STATUS_CHANGED", eventData)
+		s.hub.Publish(fmt.Sprintf("order:%s", id), "ORDER_STATUS_CHANGED", eventData)
+	}
+	return o, nil
 }

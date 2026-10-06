@@ -75,6 +75,7 @@ func (h *Handler) RegisterRoutes(r *gin.RouterGroup) {
 		cashierOrders.POST("/:id/confirm", auth.RequireRoles(auth.RoleSuperadmin, auth.RoleOwner, auth.RoleAdmin, auth.RoleCashier), h.ConfirmOrder)
 		cashierOrders.POST("/:id/payment", auth.RequireRoles(auth.RoleSuperadmin, auth.RoleOwner, auth.RoleAdmin, auth.RoleCashier), h.ProcessPayment)
 		cashierOrders.POST("/:id/cancel", auth.RequireRoles(auth.RoleSuperadmin, auth.RoleOwner, auth.RoleAdmin, auth.RoleCashier), h.CancelOrder)
+		cashierOrders.DELETE("/:id", auth.RequireRoles(auth.RoleSuperadmin, auth.RoleOwner, auth.RoleAdmin, auth.RoleCashier), h.DeleteOrder)
 		cashierOrders.POST("/:id/void", auth.RequireRoles(auth.RoleSuperadmin, auth.RoleOwner, auth.RoleAdmin, auth.RoleCashier), h.CreateVoid)
 	}
 }
@@ -520,4 +521,19 @@ func (h *Handler) CancelOrder(c *gin.Context) {
 		return
 	}
 	response.OK(c, gin.H{"cancelled": true}, "Order cancelled successfully")
+}
+
+func (h *Handler) DeleteOrder(c *gin.Context) {
+	id := c.Param("id")
+	restoID, _ := c.Get(auth.CtxRestaurantID)
+
+	if err := h.orderService.DeleteOrder(c.Request.Context(), id, restoID.(string)); err != nil {
+		if errors.Is(err, order.ErrOrderNotFound) {
+			response.NotFound(c, "ORDER_NOT_FOUND", "Order not found")
+			return
+		}
+		response.InternalServerError(c, "DELETE_ORDER_FAILED", err.Error())
+		return
+	}
+	response.OK(c, gin.H{"deleted": true}, "Order deleted successfully")
 }
