@@ -41,14 +41,34 @@
 		}
 	}
 
+	// Map pending status mutasi: mengunci tiket saat transisi status berlangsung
+	// Mencegah polling atau WebSocket menimpa kembali ke status sebelumnya (anti-mental)
+	let pendingUpdates = $state<Record<string, { targetStatus: string; previousStatus: string; timestamp: number }>>({});
+
 	async function loadOrders() {
 		try {
 			const data = await api.get<Order[]>('/kitchen/orders');
-			// Preserve completed orders if backend query has not yet refreshed
-			const existingCompleted = orders.filter((o) => o.status === 'COMPLETED');
-			const returnedIds = new Set(data.map((o) => o.id));
-			const missingCompleted = existingCompleted.filter((o) => !returnedIds.has(o.id));
-			orders = [...data, ...missingCompleted];
+
+			// Merge data dengan proteksi pendingUpdates agar tiket TIDAK MENTAL ke status sebelumnya
+			const mergedData = data.map((serverOrder) => {
+				const pending = pendingUpdates[serverOrder.id];
+				if (pending) {
+					// Jika server masih membawa status lama (karena proses backend/replikasi lag),
+					// pertahankan targetStatus yang baru sampai perubahan tuntas
+					return { ...serverOrder, status: pending.targetStatus as any };
+				}
+				return serverOrder;
+			});
+
+			// Pertahankan pesanan lokal yang baru selesai (COMPLETED) atau yang sedang dalam proses pending mutasi
+			const returnedIds = new Set(mergedData.map((o) => o.id));
+			const missingOrders = orders.filter((o) => {
+				if (returnedIds.has(o.id)) return false;
+				if (pendingUpdates[o.id] || o.status === 'COMPLETED') return true;
+				return false;
+			});
+
+			orders = [...mergedData, ...missingOrders];
 		} catch (e) {
 			console.error('Failed to load kitchen orders', e);
 		} finally {
@@ -83,9 +103,13 @@
 					];
 					if (relevantEvents.includes(msg.event)) {
 						playChime();
-						// Optimistically update or insert order in state if provided in payload
 						if (msg.data?.order) {
 							const updated = msg.data.order as Order;
+							const pending = pendingUpdates[updated.id];
+							// Jika tiket ini sedang diproses mutasinya, jangan biarkan status lama dari WS menimpa
+							if (pending && updated.status !== pending.targetStatus) {
+								updated.status = pending.targetStatus as any;
+							}
 							const idx = orders.findIndex((o) => o.id === updated.id);
 							if (idx !== -1) {
 								orders[idx] = { ...orders[idx], ...updated };
@@ -118,43 +142,62 @@
 		}
 	}
 
-	async function handleAccept(orderId: string) {
+	async function updateOrderStatus(
+		orderId: string,
+		targetStatus: 'PREPARING' | 'READY' | 'COMPLETED',
+		endpoint: string
+	) {
+		// Cegah klik ganda selama status sedang diproses
+		if (pendingUpdates[orderId]) return;
+
+		const currentOrder = orders.find((o) => o.id === orderId);
+		const previousStatus = currentOrder?.status || '';
+
+		// 1. Kunci tiket dan aktifkan buffer loading
+		pendingUpdates[orderId] = {
+			targetStatus,
+			previousStatus,
+			timestamp: Date.now()
+		};
+
+		// 2. Optimistic UI update: langsung ubah status di UI agar tiket berpindah kolom seketika
+		orders = orders.map((o) =>
+			o.id === orderId ? { ...o, status: targetStatus as any, updated_at: new Date().toISOString() } : o
+		);
+
 		try {
-			orders = orders.map((o) =>
-				o.id === orderId ? { ...o, status: 'PREPARING', updated_at: new Date().toISOString() } : o
-			);
-			await api.post(`/kitchen/orders/${orderId}/accept`);
-		} catch (e: any) {
-			console.warn('Accept order note:', e);
-		} finally {
+			// 3. Kirim request ke backend
+			await api.post(endpoint);
+
+			// Berikan buffer jeda visual agar status fix stabil di UI dan database
+			await new Promise((resolve) => setTimeout(resolve, 800));
+
+			// 4. Sinkronkan dengan server
 			await loadOrders();
+		} catch (err: any) {
+			console.error(`Gagal mengubah status pesanan ${orderId} ke ${targetStatus}:`, err);
+			// Rollback jika request gagal
+			orders = orders.map((o) =>
+				o.id === orderId ? { ...o, status: previousStatus as any } : o
+			);
+			alert(err?.message || 'Gagal mengubah status pesanan. Silakan coba lagi.');
+		} finally {
+			// Lepaskan lock buffer setelah proses tuntas sepenuhnya
+			delete pendingUpdates[orderId];
+			pendingUpdates = { ...pendingUpdates };
 		}
+	}
+
+	async function handleAccept(orderId: string) {
+		await updateOrderStatus(orderId, 'PREPARING', `/kitchen/orders/${orderId}/accept`);
 	}
 
 	async function handleReady(orderId: string) {
-		try {
-			orders = orders.map((o) =>
-				o.id === orderId ? { ...o, status: 'READY', updated_at: new Date().toISOString() } : o
-			);
-			await api.post(`/kitchen/orders/${orderId}/ready`);
-		} catch (e: any) {
-			console.warn('Mark ready note:', e);
-		} finally {
-			await loadOrders();
-		}
+		await updateOrderStatus(orderId, 'READY', `/kitchen/orders/${orderId}/ready`);
 	}
 
 	async function handleComplete(orderId: string) {
-		try {
-			orders = orders.map((o) =>
-				o.id === orderId ? { ...o, status: 'COMPLETED', updated_at: new Date().toISOString() } : o
-			);
-			await api.post(`/kitchen/orders/${orderId}/complete`);
-		} catch (e: any) {
-			console.warn('Complete order note:', e);
-		} finally {
-			await loadOrders();
-		}
+		await updateOrderStatus(orderId, 'COMPLETED', `/kitchen/orders/${orderId}/complete`);
 	}
 
 	function getElapsedMinutes(createdAt: string): number {
@@ -255,7 +298,15 @@
 			<div class="space-y-4 overflow-y-auto max-h-[75vh] pr-1">
 				{#each confirmedOrders as ticket (ticket.id)}
 					{@const mins = getElapsedMinutes(ticket.created_at)}
-					<div class="bg-slate-800/90 rounded-2xl p-4 border-2 border-blue-500/40 shadow-lg space-y-3">
+					{@const isPending = !!pendingUpdates[ticket.id]}
+					<div class="bg-slate-800/90 rounded-2xl p-4 border-2 shadow-lg space-y-3 transition-all duration-300 {isPending ? 'border-blue-400 ring-2 ring-blue-500/40 bg-slate-850' : 'border-blue-500/40'}">
+						{#if isPending}
+							<div class="flex items-center justify-center gap-2 py-1 px-3 bg-blue-500/20 text-blue-300 border border-blue-500/40 rounded-xl text-[11px] font-bold animate-pulse">
+								<RefreshCw class="w-3.5 h-3.5 animate-spin text-blue-400" />
+								<span>Menyimpan ke proses masak...</span>
+							</div>
+						{/if}
+
 						<div class="flex items-start justify-between">
 							<div>
 								<span class="text-xs font-mono font-bold text-blue-400 block">{ticket.order_number}</span>
@@ -297,11 +348,17 @@
 
 						<button
 							type="button"
+							disabled={isPending}
 							onclick={() => handleAccept(ticket.id)}
-							class="w-full bg-blue-600 hover:bg-blue-500 text-white font-extrabold py-3 rounded-xl shadow-md text-xs flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
+							class="w-full bg-blue-600 hover:bg-blue-500 disabled:bg-blue-600/60 disabled:cursor-wait text-white font-extrabold py-3 rounded-xl shadow-md text-xs flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
 						>
-							<Flame class="w-4 h-4" />
-							<span>Terima & Mulai Masak</span>
+							{#if isPending}
+								<RefreshCw class="w-4 h-4 animate-spin text-white" />
+								<span>Memproses ke Dapur...</span>
+							{:else}
+								<Flame class="w-4 h-4" />
+								<span>Terima & Mulai Masak</span>
+							{/if}
 						</button>
 					</div>
 				{:else}
@@ -325,7 +382,15 @@
 			<div class="space-y-4 overflow-y-auto max-h-[75vh] pr-1">
 				{#each preparingOrders as ticket (ticket.id)}
 					{@const mins = getElapsedMinutes(ticket.created_at)}
-					<div class="bg-slate-800/90 rounded-2xl p-4 border-2 border-amber-500/40 shadow-lg space-y-3">
+					{@const isPending = !!pendingUpdates[ticket.id]}
+					<div class="bg-slate-800/90 rounded-2xl p-4 border-2 shadow-lg space-y-3 transition-all duration-300 {isPending ? 'border-amber-400 ring-2 ring-amber-500/40 bg-slate-850' : 'border-amber-500/40'}">
+						{#if isPending}
+							<div class="flex items-center justify-center gap-2 py-1 px-3 bg-amber-500/20 text-amber-300 border border-amber-500/40 rounded-xl text-[11px] font-bold animate-pulse">
+								<RefreshCw class="w-3.5 h-3.5 animate-spin text-amber-400" />
+								<span>Menyimpan ke siap disajikan...</span>
+							</div>
+						{/if}
+
 						<div class="flex items-start justify-between">
 							<div>
 								<span class="text-xs font-mono font-bold text-amber-400 block">{ticket.order_number}</span>
@@ -360,11 +425,17 @@
 
 						<button
 							type="button"
+							disabled={isPending}
 							onclick={() => handleReady(ticket.id)}
-							class="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold py-3 rounded-xl shadow-md text-xs flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
+							class="w-full bg-amber-500 hover:bg-amber-400 disabled:bg-amber-500/60 disabled:cursor-wait text-slate-950 font-extrabold py-3 rounded-xl shadow-md text-xs flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
 						>
-							<BellRing class="w-4 h-4" />
-							<span>Tandai Siap Disajikan</span>
+							{#if isPending}
+								<RefreshCw class="w-4 h-4 animate-spin text-slate-950" />
+								<span>Menyimpan ke Siap Disajikan...</span>
+							{:else}
+								<BellRing class="w-4 h-4" />
+								<span>Tandai Siap Disajikan</span>
+							{/if}
 						</button>
 					</div>
 				{:else}
@@ -387,7 +458,15 @@
 
 			<div class="space-y-4 overflow-y-auto max-h-[75vh] pr-1">
 				{#each readyOrders as ticket (ticket.id)}
-					<div class="bg-slate-800/90 rounded-2xl p-4 border-2 border-emerald-500/40 shadow-lg space-y-3">
+					{@const isPending = !!pendingUpdates[ticket.id]}
+					<div class="bg-slate-800/90 rounded-2xl p-4 border-2 shadow-lg space-y-3 transition-all duration-300 {isPending ? 'border-emerald-400 ring-2 ring-emerald-500/40 bg-slate-850' : 'border-emerald-500/40'}">
+						{#if isPending}
+							<div class="flex items-center justify-center gap-2 py-1 px-3 bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 rounded-xl text-[11px] font-bold animate-pulse">
+								<RefreshCw class="w-3.5 h-3.5 animate-spin text-emerald-400" />
+								<span>Menyimpan pesanan selesai...</span>
+							</div>
+						{/if}
+
 						<div class="flex items-start justify-between">
 							<div>
 								<span class="text-xs font-mono font-bold text-emerald-400 block">{ticket.order_number}</span>
@@ -408,15 +487,21 @@
 
 						<button
 							type="button"
+							disabled={isPending}
 							onclick={() => handleComplete(ticket.id)}
-							class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold py-2.5 px-3 rounded-xl shadow-md text-xs flex flex-col items-center justify-center gap-0.5 transition-all active:scale-[0.98]"
+							class="w-full bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-600/60 disabled:cursor-wait text-white font-extrabold py-2.5 px-3 rounded-xl shadow-md text-xs flex flex-col items-center justify-center gap-0.5 transition-all active:scale-[0.98]"
 						>
 							<div class="flex items-center gap-1.5 font-black">
-								<Check class="w-4 h-4 stroke-3" />
-								<span>Pesanan Selesai (Sudah Diantar)</span>
+								{#if isPending}
+									<RefreshCw class="w-4 h-4 animate-spin text-white" />
+									<span>Menyelesaikan Pesanan...</span>
+								{:else}
+									<Check class="w-4 h-4 stroke-3" />
+									<span>Pesanan Selesai (Sudah Diantar)</span>
+								{/if}
 							</div>
 							<span class="text-[10px] text-emerald-100 font-medium opacity-90">
-								Klik saat pesanan telah diantar ke meja
+								{isPending ? 'Mohon tunggu sebentar...' : 'Klik saat pesanan telah diantar ke meja'}
 							</span>
 						</button>
 					</div>
