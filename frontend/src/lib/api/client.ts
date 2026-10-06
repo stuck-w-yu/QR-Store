@@ -52,12 +52,18 @@ class APIClient {
 			headers.set('Content-Type', 'application/json');
 		}
 
+		if (!headers.has('Cache-Control')) {
+			headers.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+			headers.set('Pragma', 'no-cache');
+		}
+
 		const token = this.getToken();
 		if (token) {
 			headers.set('Authorization', `Bearer ${token}`);
 		}
 
 		const response = await fetch(url, {
+			cache: 'no-store',
 			...options,
 			headers
 		});

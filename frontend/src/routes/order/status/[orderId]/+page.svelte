@@ -24,6 +24,8 @@
 	let invoiceAutoShown = $state(false);
 	let selectedMethod = $state<'QRIS' | 'CASH'>('QRIS');
 	let activeOrdersList = $state<PublicActiveOrderSummary[]>([]);
+	let isRefreshing = $state(false);
+	let refreshSuccess = $state(false);
 
 	const qrToken = $derived(
 		page.url.searchParams.get('token') ||
@@ -55,8 +57,8 @@
 		const token = qrToken;
 		if (!token) return;
 		try {
-			const info = await api.get<PublicTableInfo>(`/public/tables/${token}`);
-			if (info && info.active_orders && info.active_orders.length > 0) {
+			const info = await api.get<PublicTableInfo>(`/public/tables/${encodeURIComponent(token)}?_t=${Date.now()}`);
+			if (info && Array.isArray(info.active_orders)) {
 				activeOrdersList = info.active_orders;
 			}
 		} catch (e) {
@@ -123,9 +125,13 @@
 		}, 200);
 	}
 
-	async function loadOrder() {
+	async function loadOrder(isManual = false) {
+		if (isManual) {
+			isRefreshing = true;
+		}
+		const startTime = Date.now();
 		try {
-			const o = await api.get<Order>(`/public/orders/${orderId}`);
+			const o = await api.get<Order>(`/public/orders/${orderId}?_t=${Date.now()}`);
 			order = o;
 
 			if (o.proof_url) {
@@ -145,7 +151,7 @@
 				}
 			} else {
 				try {
-					const p = await api.get<Payment>(`/orders/${orderId}/payment`);
+					const p = await api.get<Payment>(`/orders/${orderId}/payment?_t=${Date.now()}`);
 					payment = p;
 				} catch (e) {
 					console.log('Payment record not found or not created yet');
@@ -158,10 +164,24 @@
 			}
 
 			// Muat seluruh pesanan aktif meja untuk multi-order tracking
-			loadActiveOrders();
+			await loadActiveOrders();
+
+			if (isManual) {
+				refreshSuccess = true;
+				setTimeout(() => {
+					refreshSuccess = false;
+				}, 2200);
+			}
 		} catch (err: any) {
 			error = err?.message || 'Gagal memuat status pesanan.';
 		} finally {
+			if (isManual) {
+				const elapsed = Date.now() - startTime;
+				if (elapsed < 400) {
+					await new Promise((resolve) => setTimeout(resolve, 400 - elapsed));
+				}
+				isRefreshing = false;
+			}
 			loading = false;
 		}
 	}
@@ -184,9 +204,10 @@
 						if (msg.data?.order) {
 							const prevStatus = order?.status;
 							order = msg.data.order;
+							loadActiveOrders();
 
 							if (prevStatus === 'WAITING_PAYMENT' && order?.status === 'CONFIRMED') {
-								api.get<Payment>(`/orders/${orderId}/payment`).then((p) => {
+								api.get<Payment>(`/orders/${orderId}/payment?_t=${Date.now()}`).then((p) => {
 									payment = p;
 								}).catch(() => {});
 								invoiceAutoShown = true;
@@ -360,14 +381,22 @@
 			<h1 class="font-bold text-sm text-slate-800 font-['Outfit']">Status Pesanan</h1>
 			<button
 				type="button"
-				onclick={loadOrder}
-				class="w-8 h-8 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center hover:bg-slate-200"
-				title="Perbarui Status"
+				onclick={() => loadOrder(true)}
+				disabled={isRefreshing}
+				class="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 active:scale-95 disabled:opacity-60 text-slate-700 flex items-center justify-center transition-all cursor-pointer relative"
+				title="Perbarui Status Pesanan"
 			>
-				<RefreshCw class="w-4 h-4" />
+				<RefreshCw class="w-4 h-4 transition-transform {isRefreshing ? 'animate-spin text-orange-600' : 'text-slate-700'}" />
 			</button>
 		</div>
 	</header>
+
+	{#if refreshSuccess}
+		<div class="fixed top-14 left-1/2 -translate-x-1/2 z-50 bg-emerald-600 text-white text-xs font-bold px-3.5 py-1.5 rounded-full shadow-lg flex items-center gap-1.5 animate-in fade-in slide-in-from-top-2 duration-150">
+			<Check class="w-3.5 h-3.5" />
+			<span>Status pesanan diperbarui</span>
+		</div>
+	{/if}
 
 	<main class="max-w-md mx-auto p-4 space-y-4">
 		{#if loading}
