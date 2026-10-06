@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import { page } from '$app/state';
+	import { goto } from '$app/navigation';
 	import { api, formatRupiah } from '$lib/api/client';
 	import { cart } from '$lib/stores/cart.svelte';
 	import type { Order, Payment, PublicTableInfo, PublicActiveOrderSummary } from '$lib/types';
@@ -14,7 +15,8 @@
 	} from '@lucide/svelte';
 	import { uploadToGDrive, deleteFromGDrive } from '$lib/services/gdriveBucket';
 
-	const orderId = page.params.orderId;
+	const orderId = $derived(page.params.orderId || '');
+	let prevOrderId = $state('');
 
 	let loading = $state(true);
 	let error = $state<string | null>(null);
@@ -60,6 +62,8 @@
 			const info = await api.get<PublicTableInfo>(`/public/tables/${encodeURIComponent(token)}?_t=${Date.now()}`);
 			if (info && Array.isArray(info.active_orders)) {
 				activeOrdersList = info.active_orders;
+			} else {
+				activeOrdersList = [];
 			}
 		} catch (e) {
 			console.warn('Failed to load active orders list', e);
@@ -126,13 +130,25 @@
 	}
 
 	async function loadOrder(isManual = false) {
+		const currentId = orderId;
+		if (!currentId) return;
+
 		if (isManual) {
 			isRefreshing = true;
 		}
 		const startTime = Date.now();
 		try {
-			const o = await api.get<Order>(`/public/orders/${orderId}?_t=${Date.now()}`);
+			const o = await api.get<Order>(`/public/orders/${currentId}?_t=${Date.now()}`);
 			order = o;
+
+			// Reset proof state untuk pesanan aktif
+			proofImage = null;
+			proofFileName = '';
+			proofFileSize = '';
+			proofUploadedAt = '';
+			gdriveFileUrl = null;
+			gdriveFileId = null;
+			proofSubmitted = false;
 
 			if (o.proof_url) {
 				proofImage = o.proof_url;
@@ -140,18 +156,31 @@
 				if (o.proof_url.startsWith('http')) {
 					gdriveFileUrl = o.proof_url;
 				}
+			} else {
+				try {
+					const saved = localStorage.getItem(`payment_proof_${currentId}`);
+					if (saved) {
+						const d = JSON.parse(saved);
+						proofImage = d.image;
+						proofFileName = d.fileName;
+						proofFileSize = d.fileSize;
+						proofUploadedAt = d.uploadedAt;
+						gdriveFileUrl = d.gdriveUrl || null;
+						gdriveFileId = d.gdriveId || null;
+					}
+				} catch (_) {}
 			}
 
 			if (o.status === 'WAITING_PAYMENT') {
 				try {
-					const p = await api.post<Payment>(`/orders/${orderId}/payment`);
+					const p = await api.post<Payment>(`/orders/${currentId}/payment`);
 					payment = p;
 				} catch (e) {
 					console.error('Failed to create payment session', e);
 				}
 			} else {
 				try {
-					const p = await api.get<Payment>(`/orders/${orderId}/payment?_t=${Date.now()}`);
+					const p = await api.get<Payment>(`/orders/${currentId}/payment?_t=${Date.now()}`);
 					payment = p;
 				} catch (e) {
 					console.log('Payment record not found or not created yet');
@@ -161,6 +190,15 @@
 					invoiceAutoShown = true;
 					showInvoiceModal = true;
 				}
+			}
+
+			if (o.status === 'COMPLETED' || o.status === 'CANCELLED') {
+				try {
+					const saved = localStorage.getItem(`active_order_${qrToken}`);
+					if (saved === currentId) {
+						localStorage.removeItem(`active_order_${qrToken}`);
+					}
+				} catch (_) {}
 			}
 
 			// Muat seluruh pesanan aktif meja untuk multi-order tracking
@@ -186,15 +224,47 @@
 		}
 	}
 
+	async function switchToOrder(targetId: string) {
+		if (!targetId || targetId === orderId) return;
+		loading = true;
+		prevOrderId = targetId;
+		await goto(`/order/status/${targetId}?token=${encodeURIComponent(qrToken)}`, {
+			replaceState: false,
+			noScroll: true,
+			keepFocus: true
+		});
+		await loadOrder();
+		connectWebSocket();
+	}
+
+	$effect(() => {
+		const currentId = page.params.orderId;
+		if (currentId && currentId !== prevOrderId) {
+			prevOrderId = currentId;
+			loadOrder();
+			connectWebSocket();
+		}
+	});
+
 	function connectWebSocket() {
+		const currentId = orderId;
+		if (!currentId) return;
+
+		if (ws) {
+			try {
+				ws.close();
+			} catch (_) {}
+			ws = null;
+		}
+
 		const wsURL = import.meta.env.VITE_WS_URL || 'ws://localhost:8080/ws';
-		const channel = `order:${orderId}`;
+		const channel = `order:${currentId}`;
 
 		try {
 			ws = new WebSocket(`${wsURL}?channel=${channel}`);
 
 			ws.onopen = () => {
-				console.log('Connected to order websocket');
+				console.log(`Connected to order websocket: ${currentId}`);
 			};
 
 			ws.onmessage = (event) => {
@@ -207,13 +277,21 @@
 							loadActiveOrders();
 
 							if (prevStatus === 'WAITING_PAYMENT' && order?.status === 'CONFIRMED') {
-								api.get<Payment>(`/orders/${orderId}/payment?_t=${Date.now()}`).then((p) => {
+								api.get<Payment>(`/orders/${currentId}/payment?_t=${Date.now()}`).then((p) => {
 									payment = p;
 								}).catch(() => {});
 								invoiceAutoShown = true;
 								showInvoiceModal = true;
 								confetti({ particleCount: 80, spread: 60, origin: { y: 0.6 } });
 							} else if (order?.status === 'READY') {
+								confetti({ particleCount: 120, spread: 80, origin: { y: 0.5 } });
+							} else if (order?.status === 'COMPLETED') {
+								try {
+									const saved = localStorage.getItem(`active_order_${qrToken}`);
+									if (saved === currentId) {
+										localStorage.removeItem(`active_order_${qrToken}`);
+									}
+								} catch (_) {}
 								confetti({ particleCount: 120, spread: 80, origin: { y: 0.5 } });
 							}
 						}
@@ -425,22 +503,25 @@
 								{activeOrdersList.length} Pesanan Aktif Meja Ini
 							</h3>
 						</div>
-						<span class="text-[10px] text-slate-400 font-medium">Klik untuk beralih</span>
+						<span class="text-[10px] sm:text-[11px] font-bold text-orange-600 flex items-center gap-0.5">
+							Klik untuk lacak pesanan secara rinci &rarr;
+						</span>
 					</div>
 
 					<div class="grid grid-cols-2 gap-2">
 						{#each activeOrdersList as act, idx}
 							{@const info = getMiniStatusInfo(act.status)}
 							{@const isSelected = act.id === orderId}
-							<a
-								href="/order/status/{act.id}?token={qrToken}"
-								class="p-2.5 rounded-2xl transition-all border flex flex-col justify-between gap-2 text-left relative {
+							<button
+								type="button"
+								onclick={() => switchToOrder(act.id)}
+								class="p-2.5 sm:p-3 rounded-2xl transition-all border flex flex-col justify-between gap-2 text-left relative cursor-pointer {
 									isSelected
-										? 'bg-linear-to-br from-orange-500/10 to-amber-500/5 border-orange-500 ring-2 ring-orange-500/20 shadow-xs'
-										: 'bg-slate-50 hover:bg-slate-100/80 border-slate-200/80 text-slate-600'
+										? 'bg-linear-to-br from-orange-500/10 to-amber-500/5 border-orange-500 ring-2 ring-orange-500/25 shadow-md scale-[1.01]'
+										: 'bg-slate-50 hover:bg-orange-50/40 hover:border-orange-300 border-slate-200/80 text-slate-600 active:scale-98'
 								}"
 							>
-								<!-- Baris 1: Index + Order Number + Pill Sedang Dilihat -->
+								<!-- Baris 1: Index + Order Number + Pill Sedang Dilihat / Lacak -->
 								<div class="flex items-center justify-between gap-1">
 									<div class="flex items-center gap-1.5 min-w-0">
 										<span class="px-1.5 py-0.5 rounded-md text-[10px] font-black font-['Outfit'] shrink-0 {
@@ -448,13 +529,17 @@
 										}">
 											#{idx + 1}
 										</span>
-										<span class="font-mono text-[11px] sm:text-xs font-bold truncate {isSelected ? 'text-slate-900' : 'text-slate-700'}">
+										<span class="font-mono text-xs font-bold truncate {isSelected ? 'text-slate-900 font-black' : 'text-slate-700'}">
 											{act.order_number}
 										</span>
 									</div>
 									{#if isSelected}
-										<span class="shrink-0 px-1.5 py-0.2 rounded-md text-[9px] font-black uppercase tracking-wider bg-orange-500 text-white shadow-2xs">
+										<span class="shrink-0 px-1.5 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider bg-orange-600 text-white shadow-2xs">
 											Aktif
+										</span>
+									{:else}
+										<span class="shrink-0 text-[10px] text-orange-600 font-bold hover:underline flex items-center">
+											Lacak &rarr;
 										</span>
 									{/if}
 								</div>
@@ -469,7 +554,7 @@
 										{formatRupiah(act.total)}
 									</span>
 								</div>
-							</a>
+							</button>
 						{/each}
 					</div>
 				</div>
@@ -495,7 +580,8 @@
 				</div>
 			</div>
 
-			<!-- Status Memasak / Dapur Highlight Card (Menampilkan secara jelas apakah sedang dimasak atau belum) -->
+			<!-- Status Memasak / Dapur Highlight Card (Hanya tampil saat proses berlangsung / belum selesai diantar) -->
+			{#if order.status !== 'COMPLETED'}
 			<div class="rounded-3xl p-4.5 border shadow-sm transition-all {
 				order.status === 'PREPARING'
 					? 'bg-linear-to-r from-orange-500/15 via-amber-500/10 to-orange-500/5 border-orange-500/40 text-orange-950'
@@ -564,8 +650,6 @@
 								💳 Menunggu Pembayaran Selesai
 							{:else if order.status === 'READY'}
 								🍽️ Hidangan Siap Diantar ke Meja
-							{:else if order.status === 'COMPLETED'}
-								✨ Pesanan Selesai Diantar
 							{:else}
 								Pesanan Dibatalkan
 							{/if}
@@ -580,8 +664,6 @@
 								Pesanan akan langsung dimasak segera setelah pembayaran Anda diselesaikan.
 							{:else if order.status === 'READY'}
 								Makanan dan minuman sudah matang dan sedang diantar ke meja Anda.
-							{:else if order.status === 'COMPLETED'}
-								Semua hidangan sudah disajikan. Selamat menikmati santapan Anda!
 							{:else}
 								Pesanan ini telah dibatalkan.
 							{/if}
@@ -596,6 +678,7 @@
 					</div>
 				</div>
 			</div>
+			{/if}
 
 			<!-- Action Card: Tetap Masih Bisa Memesan Menu Baru Lagi di Sini -->
 			<div class="bg-linear-to-r from-orange-50 via-amber-50 to-orange-50/50 rounded-3xl p-4 border border-orange-200 shadow-xs flex items-center justify-between gap-3">
@@ -1058,45 +1141,77 @@
 				</div>
 			{/if}
 
-			<!-- Progress Stepper -->
-			<div class="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-xs space-y-6">
-				<h2 class="font-extrabold text-sm text-slate-900 font-['Outfit']">Lacak Status Pesanan</h2>
+			<!-- Lacak Status Pesanan (Progress Stepper) - Hilang bila pesanan sudah selesai diantar semua -->
+			{#if order.status !== 'COMPLETED'}
+				<div class="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-xs space-y-6">
+					<h2 class="font-extrabold text-sm text-slate-900 font-['Outfit']">Lacak Status Pesanan</h2>
 
-				<div class="relative pl-7 space-y-7 before:absolute before:left-3 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-200">
-					{#each steps as step, idx}
-						{@const currentIdx = getStepIndex(order.status)}
-						{@const isPast = currentIdx > idx}
-						{@const isCurrent = currentIdx === idx}
-						{@const isPending = currentIdx < idx}
+					<div class="relative pl-7 space-y-7 before:absolute before:left-3 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-200">
+						{#each steps as step, idx}
+							{@const currentIdx = getStepIndex(order.status)}
+							{@const isPast = currentIdx > idx}
+							{@const isCurrent = currentIdx === idx}
+							{@const isPending = currentIdx < idx}
 
-						<div class="relative">
-							<!-- Circle Indicator -->
-							<div
-								class="absolute -left-7 top-0.5 w-6 h-6 rounded-full flex items-center justify-center border-2 text-xs transition-all {isPast
-									? 'bg-orange-600 border-orange-600 text-white'
-									: isCurrent
-									? 'bg-white border-orange-600 text-orange-600 ring-4 ring-orange-100 font-bold'
-									: 'bg-white border-slate-300 text-slate-300'}"
-							>
-								{#if isPast}
-									<Check class="w-3.5 h-3.5 stroke-3" />
-								{:else}
-									<span class="text-[11px]">{idx + 1}</span>
-								{/if}
-							</div>
-
-							<div>
-								<div class="text-sm font-bold {isCurrent ? 'text-orange-600 font-extrabold' : isPast ? 'text-slate-800' : 'text-slate-400'}">
-									{step.label}
+							<div class="relative">
+								<!-- Circle Indicator -->
+								<div
+									class="absolute -left-7 top-0.5 w-6 h-6 rounded-full flex items-center justify-center border-2 text-xs transition-all {isPast
+										? 'bg-orange-600 border-orange-600 text-white'
+										: isCurrent
+										? 'bg-white border-orange-600 text-orange-600 ring-4 ring-orange-100 font-bold'
+										: 'bg-white border-slate-300 text-slate-300'}"
+								>
+									{#if isPast}
+										<Check class="w-3.5 h-3.5 stroke-3" />
+									{:else}
+										<span class="text-[11px]">{idx + 1}</span>
+									{/if}
 								</div>
-								<div class="text-xs {isCurrent ? 'text-slate-600' : 'text-slate-400'} mt-0.5">
-									{step.desc}
+
+								<div>
+									<div class="text-sm font-bold {isCurrent ? 'text-orange-600 font-extrabold' : isPast ? 'text-slate-800' : 'text-slate-400'}">
+										{step.label}
+									</div>
+									<div class="text-xs {isCurrent ? 'text-slate-600' : 'text-slate-400'} mt-0.5">
+										{step.desc}
+									</div>
 								</div>
 							</div>
-						</div>
-					{/each}
+						{/each}
+					</div>
 				</div>
-			</div>
+			{:else}
+				<!-- Status Pesanan Selesai Diantar -->
+				<div class="bg-linear-to-br from-emerald-500/10 via-teal-500/10 to-emerald-500/5 border border-emerald-500/30 rounded-3xl p-6 text-center shadow-xs space-y-3">
+					<div class="w-14 h-14 mx-auto rounded-2xl bg-emerald-600 text-white flex items-center justify-center shadow-md shadow-emerald-600/20">
+						<Check class="w-7 h-7 stroke-3" />
+					</div>
+					<div>
+						<h2 class="font-extrabold text-base text-slate-900 font-['Outfit']">Semua Hidangan Selesai Diantar</h2>
+						<p class="text-xs text-slate-600 mt-1 max-w-xs mx-auto leading-relaxed">
+							Semua pesanan makanan dan minuman telah disajikan di meja Anda. Selamat menikmati santapan Anda!
+						</p>
+					</div>
+					<div class="pt-2 flex flex-col sm:flex-row items-center justify-center gap-2">
+						<button
+							type="button"
+							onclick={() => (showInvoiceModal = true)}
+							class="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-700 font-bold text-xs hover:bg-slate-50 transition-all flex items-center justify-center gap-2 shadow-2xs"
+						>
+							<Receipt class="w-4 h-4 text-slate-500" />
+							<span>Lihat Struk / Invoice</span>
+						</button>
+						<a
+							href={orderMenuUrl}
+							class="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-500 active:scale-95 text-white font-bold text-xs transition-all flex items-center justify-center gap-2 shadow-sm"
+						>
+							<Plus class="w-4 h-4" />
+							<span>Pesan Menu Baru Lagi</span>
+						</a>
+					</div>
+				</div>
+			{/if}
 
 			<!-- Order Items Details -->
 			<div class="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-xs space-y-3">
