@@ -47,7 +47,8 @@ type PublicTableInfo struct {
 		QRToken string `json:"qr_token"`
 		Status  string `json:"status"`
 	} `json:"table"`
-	ActiveOrder *PublicActiveOrderSummary `json:"active_order,omitempty"`
+	ActiveOrder  *PublicActiveOrderSummary   `json:"active_order,omitempty"`
+	ActiveOrders []PublicActiveOrderSummary `json:"active_orders,omitempty"`
 }
 
 type ServiceRequest struct {
@@ -131,25 +132,27 @@ func (r *repository) GetByQRToken(ctx context.Context, qrToken string) (*PublicT
 		return nil, err
 	}
 
-	// Cek apakah meja ini memiliki pesanan yang sedang diproses (belum selesai atau dibatalkan)
-	activeOrderQuery := `
+	// Cek apakah meja ini memiliki satu atau lebih pesanan yang sedang diproses (belum selesai atau dibatalkan)
+	activeOrdersQuery := `
 		SELECT id, order_number, status, payment_status, total, created_at
 		FROM orders
 		WHERE table_id = $1 AND status IN ('WAITING_PAYMENT', 'CONFIRMED', 'PREPARING', 'READY')
 		ORDER BY created_at DESC
-		LIMIT 1
 	`
-	var activeOrder PublicActiveOrderSummary
-	err = r.pool.QueryRow(ctx, activeOrderQuery, info.Table.ID).Scan(
-		&activeOrder.ID,
-		&activeOrder.OrderNumber,
-		&activeOrder.Status,
-		&activeOrder.PaymentStatus,
-		&activeOrder.Total,
-		&activeOrder.CreatedAt,
-	)
+	rows, err := r.pool.Query(ctx, activeOrdersQuery, info.Table.ID)
 	if err == nil {
-		info.ActiveOrder = &activeOrder
+		defer rows.Close()
+		var list []PublicActiveOrderSummary
+		for rows.Next() {
+			var o PublicActiveOrderSummary
+			if err := rows.Scan(&o.ID, &o.OrderNumber, &o.Status, &o.PaymentStatus, &o.Total, &o.CreatedAt); err == nil {
+				list = append(list, o)
+			}
+		}
+		if len(list) > 0 {
+			info.ActiveOrder = &list[0]
+			info.ActiveOrders = list
+		}
 	}
 
 	return &info, nil

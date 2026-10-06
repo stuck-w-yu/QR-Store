@@ -3,7 +3,7 @@
 	import { page } from '$app/state';
 	import { api, formatRupiah } from '$lib/api/client';
 	import { cart } from '$lib/stores/cart.svelte';
-	import type { Order, Payment } from '$lib/types';
+	import type { Order, Payment, PublicTableInfo, PublicActiveOrderSummary } from '$lib/types';
 	import confetti from 'canvas-confetti';
 	import { 
 		Clock, CheckCircle2, ChefHat, BellRing, Sparkles, 
@@ -23,6 +23,7 @@
 	let showInvoiceModal = $state(false);
 	let invoiceAutoShown = $state(false);
 	let selectedMethod = $state<'QRIS' | 'CASH'>('QRIS');
+	let activeOrdersList = $state<PublicActiveOrderSummary[]>([]);
 
 	const qrToken = $derived(
 		page.url.searchParams.get('token') ||
@@ -34,6 +35,34 @@
 	const orderMenuUrl = $derived(
 		qrToken ? `/order?token=${encodeURIComponent(qrToken)}&new_order=true` : '/order?new_order=true'
 	);
+
+	function getMiniStatusInfo(status: string) {
+		switch (status) {
+			case 'PREPARING':
+				return { label: 'Sedang Dimasak', badge: 'bg-orange-500 text-white', icon: '🍳', border: 'border-orange-500' };
+			case 'CONFIRMED':
+				return { label: 'Belum Dimasak', badge: 'bg-blue-600 text-white', icon: '⏱️', border: 'border-blue-500' };
+			case 'WAITING_PAYMENT':
+				return { label: 'Belum Bayar', badge: 'bg-amber-500 text-white', icon: '💳', border: 'border-amber-500' };
+			case 'READY':
+				return { label: 'Siap Diantar', badge: 'bg-emerald-600 text-white', icon: '🍽️', border: 'border-emerald-500' };
+			default:
+				return { label: status, badge: 'bg-slate-600 text-white', icon: '📋', border: 'border-slate-500' };
+		}
+	}
+
+	async function loadActiveOrders() {
+		const token = qrToken;
+		if (!token) return;
+		try {
+			const info = await api.get<PublicTableInfo>(`/public/tables/${token}`);
+			if (info && info.active_orders && info.active_orders.length > 0) {
+				activeOrdersList = info.active_orders;
+			}
+		} catch (e) {
+			console.warn('Failed to load active orders list', e);
+		}
+	}
 
 	// Proof of Payment State
 	let proofImage = $state<string | null>(null);
@@ -127,6 +156,9 @@
 					showInvoiceModal = true;
 				}
 			}
+
+			// Muat seluruh pesanan aktif meja untuk multi-order tracking
+			loadActiveOrders();
 		} catch (err: any) {
 			error = err?.message || 'Gagal memuat status pesanan.';
 		} finally {
@@ -291,6 +323,7 @@
 
 	onMount(() => {
 		loadOrder();
+		loadActiveOrders();
 		connectWebSocket();
 		try {
 			const saved = localStorage.getItem(`payment_proof_${orderId}`);
@@ -350,6 +383,57 @@
 				<a href={orderMenuUrl} class="inline-block text-xs font-bold text-orange-600">Pilih Menu Restoran</a>
 			</div>
 		{:else if order}
+			<!-- Multi-Order Switcher Bar (Jika ada lebih dari 1 pesanan aktif di meja ini) -->
+			{#if activeOrdersList.length > 1}
+				<div class="bg-linear-to-r from-slate-900 via-slate-850 to-slate-900 border-2 border-orange-500/50 rounded-3xl p-4 shadow-xl text-white space-y-3 animate-in fade-in slide-in-from-top-2">
+					<div class="flex items-center justify-between pb-2 border-b border-slate-800">
+						<div class="flex items-center gap-2">
+							<div class="w-2.5 h-2.5 rounded-full bg-orange-500 animate-pulse"></div>
+							<h3 class="text-xs font-black uppercase tracking-wider text-orange-300 font-['Outfit']">
+								{activeOrdersList.length} Pesanan Aktif di Meja Ini
+							</h3>
+						</div>
+						<span class="text-[10px] text-slate-400 font-medium">Klik untuk beralih</span>
+					</div>
+
+					<div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+						{#each activeOrdersList as act, idx}
+							{@const info = getMiniStatusInfo(act.status)}
+							{@const isSelected = act.id === orderId}
+							<a
+								href="/order/status/{act.id}?token={qrToken}"
+								class="flex items-center justify-between p-3 rounded-2xl transition-all border {
+									isSelected
+										? 'bg-orange-500/20 border-orange-500 text-white shadow-md ring-1 ring-orange-500/50'
+										: 'bg-slate-800/80 border-slate-700/80 hover:bg-slate-800 hover:border-slate-600 text-slate-300'
+								}"
+							>
+								<div class="min-w-0 pr-2">
+									<div class="flex items-center gap-1.5">
+										<span class="text-xs font-bold font-mono {isSelected ? 'text-orange-300' : 'text-slate-200'}">
+											#{idx + 1} {act.order_number}
+										</span>
+										{#if isSelected}
+											<span class="w-1.5 h-1.5 rounded-full bg-orange-400 animate-ping"></span>
+										{/if}
+									</div>
+									<span class="text-[11px] font-semibold text-slate-400 font-['Outfit'] block mt-0.5">
+										{formatRupiah(act.total)}
+									</span>
+								</div>
+
+								<div class="shrink-0 text-right">
+									<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[10px] font-extrabold {info.badge} shadow-xs">
+										<span>{info.icon}</span>
+										<span>{info.label}</span>
+									</span>
+								</div>
+							</a>
+						{/each}
+					</div>
+				</div>
+			{/if}
+
 			<!-- Order Header Card -->
 			<div class="bg-linear-to-br from-slate-900 via-slate-800 to-orange-950 text-white rounded-3xl p-5 shadow-lg relative overflow-hidden">
 				<div class="absolute -right-8 -bottom-8 w-32 h-32 bg-orange-500/20 rounded-full blur-2xl"></div>
@@ -461,6 +545,13 @@
 								Pesanan ini telah dibatalkan.
 							{/if}
 						</p>
+
+						{#if activeOrdersList.length > 1}
+							<div class="mt-2.5 pt-2 border-t border-slate-200/60 flex items-center justify-between text-[11px] text-slate-500 font-medium">
+								<span>Melacak status <strong>#{order.order_number}</strong></span>
+								<span class="text-orange-600 font-bold">Tersedia {activeOrdersList.length} pesanan di atas &uarr;</span>
+							</div>
+						{/if}
 					</div>
 				</div>
 			</div>
@@ -1203,12 +1294,8 @@
 					{/if}
 				</div>
 
-				<!-- Footer note / Verification QR -->
+				<!-- Footer note -->
 				<div class="pt-3 border-t border-dashed border-slate-300 text-center space-y-2">
-					<div class="inline-flex flex-col items-center justify-center p-2.5 rounded-xl bg-slate-50 border border-slate-200">
-						<QrCode class="w-16 h-16 text-slate-700" />
-						<span class="font-mono font-bold text-[10px] text-slate-500 mt-1">KASIR: {order.order_number}</span>
-					</div>
 					<p class="text-[10px] text-slate-400 max-w-xs mx-auto">
 						{isPaid
 							? 'Struk ini diterbitkan secara otomatis dan berlaku sebagai bukti pembayaran sah dari Resto Nusantara.'

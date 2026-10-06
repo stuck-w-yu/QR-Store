@@ -120,6 +120,7 @@ export interface PublicTableInfo {
 		status: string;
 	};
 	active_order?: PublicActiveOrderSummary | null;
+	active_orders?: PublicActiveOrderSummary[];
 }
 
 export interface ModifierOption {

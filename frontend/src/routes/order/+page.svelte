@@ -17,6 +17,7 @@
 	let tableInfo = $state<PublicTableInfo | null>(null);
 	let currentToken = $state<string>('');
 	let activeOrder = $state<PublicActiveOrderSummary | null>(null);
+	let activeOrdersList = $state<PublicActiveOrderSummary[]>([]);
 
 	// Modal State
 	let selectedMenu = $state<Menu | null>(null);
@@ -81,6 +82,7 @@
 			}
 
 			activeOrder = existingActiveOrder;
+			activeOrdersList = info.active_orders || (existingActiveOrder ? [existingActiveOrder] : []);
 
 			// Jika ada pesanan yang sedang diproses dan user belum meminta pesan menu baru,
 			// alihkan langsung ke halaman status pemesanan
@@ -213,7 +215,58 @@
 		<!-- Main Content Container -->
 		<main class="max-w-lg mx-auto px-4 -mt-7 relative z-20">
 			<!-- Active Order Status Banner (Jika ada pesanan yang sedang diproses & pelanggan menambah pesanan baru) -->
-			{#if activeOrder}
+			{#if activeOrdersList.length > 1}
+				<div class="mb-4 bg-slate-900/95 backdrop-blur-md rounded-3xl p-4 shadow-xl border-2 border-orange-500/50 text-white space-y-3 animate-in fade-in slide-in-from-top-2">
+					<div class="flex items-center justify-between pb-2 border-b border-slate-800">
+						<div class="flex items-center gap-2">
+							<div class="w-2.5 h-2.5 rounded-full bg-orange-500 animate-pulse"></div>
+							<h3 class="text-xs font-black uppercase tracking-wider text-orange-300 font-['Outfit']">
+								{activeOrdersList.length} Pesanan Sedang Diproses
+							</h3>
+						</div>
+						<a
+							href="/order/status/{activeOrdersList[0].id}?token={cart.qrToken || currentToken}"
+							class="text-[11px] font-extrabold text-orange-400 hover:text-orange-300 flex items-center gap-1"
+						>
+							<span>Lacak Semua</span>
+							<ArrowRight class="w-3 h-3" />
+						</a>
+					</div>
+
+					<div class="grid grid-cols-1 gap-2">
+						{#each activeOrdersList as act, idx}
+							{@const badge = getStatusBadge(act.status)}
+							<a
+								href="/order/status/{act.id}?token={cart.qrToken || currentToken}"
+								class="flex items-center justify-between p-2.5 rounded-2xl bg-slate-800/80 hover:bg-slate-800 border border-slate-700/80 transition-all text-left"
+							>
+								<div class="min-w-0 pr-2">
+									<div class="flex items-center gap-2 flex-wrap">
+										<span class="text-xs font-bold font-mono text-white">#{idx + 1} {act.order_number}</span>
+										<span class="text-[10px] font-extrabold px-2 py-0.5 rounded-full border {badge.bg}">
+											{badge.label}
+										</span>
+									</div>
+									<p class="text-[11px] text-slate-400 mt-0.5">
+										{act.status === 'PREPARING'
+											? '🍳 Sedang dimasak oleh chef'
+											: act.status === 'CONFIRMED'
+											? '⏱️ Belum dimasak (antrean dapur)'
+											: act.status === 'WAITING_PAYMENT'
+											? '💳 Belum dimasak (menunggu pembayaran)'
+											: '🍽️ Siap diantar'}
+									</p>
+								</div>
+								<div class="shrink-0 text-right">
+									<span class="text-xs font-extrabold text-orange-400 font-['Outfit']">
+										{formatRupiah(act.total)}
+									</span>
+								</div>
+							</a>
+						{/each}
+					</div>
+				</div>
+			{:else if activeOrder}
 				{@const badge = getStatusBadge(activeOrder.status)}
 				<div class="mb-4 bg-white/95 backdrop-blur-md rounded-2xl p-3.5 shadow-md border-2 border-orange-500/40 flex items-center justify-between gap-3 animate-in fade-in slide-in-from-top-2">
 					<div class="flex items-center gap-3 min-w-0">
