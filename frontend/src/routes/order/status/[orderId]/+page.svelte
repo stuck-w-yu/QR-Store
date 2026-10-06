@@ -414,47 +414,59 @@
 		{:else if order}
 			<!-- Multi-Order Switcher Bar (Jika ada lebih dari 1 pesanan aktif di meja ini) -->
 			{#if activeOrdersList.length > 1}
-				<div class="bg-linear-to-r from-slate-900 via-slate-850 to-slate-900 border-2 border-orange-500/50 rounded-3xl p-4 shadow-xl text-white space-y-3 animate-in fade-in slide-in-from-top-2">
-					<div class="flex items-center justify-between pb-2 border-b border-slate-800">
+				<div class="bg-white rounded-3xl p-3.5 sm:p-4 border border-slate-200/90 shadow-sm space-y-2.5 animate-in fade-in slide-in-from-top-2">
+					<div class="flex items-center justify-between px-1">
 						<div class="flex items-center gap-2">
-							<div class="w-2.5 h-2.5 rounded-full bg-orange-500 animate-pulse"></div>
-							<h3 class="text-xs font-black uppercase tracking-wider text-orange-300 font-['Outfit']">
-								{activeOrdersList.length} Pesanan Aktif di Meja Ini
+							<span class="flex h-2 w-2 relative">
+								<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span>
+								<span class="relative inline-flex rounded-full h-2 w-2 bg-orange-500"></span>
+							</span>
+							<h3 class="text-xs font-black uppercase tracking-wider text-slate-800 font-['Outfit']">
+								{activeOrdersList.length} Pesanan Aktif Meja Ini
 							</h3>
 						</div>
 						<span class="text-[10px] text-slate-400 font-medium">Klik untuk beralih</span>
 					</div>
 
-					<div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+					<div class="grid grid-cols-2 gap-2">
 						{#each activeOrdersList as act, idx}
 							{@const info = getMiniStatusInfo(act.status)}
 							{@const isSelected = act.id === orderId}
 							<a
 								href="/order/status/{act.id}?token={qrToken}"
-								class="flex items-center justify-between p-3 rounded-2xl transition-all border {
+								class="p-2.5 rounded-2xl transition-all border flex flex-col justify-between gap-2 text-left relative {
 									isSelected
-										? 'bg-orange-500/20 border-orange-500 text-white shadow-md ring-1 ring-orange-500/50'
-										: 'bg-slate-800/80 border-slate-700/80 hover:bg-slate-800 hover:border-slate-600 text-slate-300'
+										? 'bg-linear-to-br from-orange-500/10 to-amber-500/5 border-orange-500 ring-2 ring-orange-500/20 shadow-xs'
+										: 'bg-slate-50 hover:bg-slate-100/80 border-slate-200/80 text-slate-600'
 								}"
 							>
-								<div class="min-w-0 pr-2">
-									<div class="flex items-center gap-1.5">
-										<span class="text-xs font-bold font-mono {isSelected ? 'text-orange-300' : 'text-slate-200'}">
-											#{idx + 1} {act.order_number}
+								<!-- Baris 1: Index + Order Number + Pill Sedang Dilihat -->
+								<div class="flex items-center justify-between gap-1">
+									<div class="flex items-center gap-1.5 min-w-0">
+										<span class="px-1.5 py-0.5 rounded-md text-[10px] font-black font-['Outfit'] shrink-0 {
+											isSelected ? 'bg-orange-600 text-white' : 'bg-slate-200 text-slate-700'
+										}">
+											#{idx + 1}
 										</span>
-										{#if isSelected}
-											<span class="w-1.5 h-1.5 rounded-full bg-orange-400 animate-ping"></span>
-										{/if}
+										<span class="font-mono text-[11px] sm:text-xs font-bold truncate {isSelected ? 'text-slate-900' : 'text-slate-700'}">
+											{act.order_number}
+										</span>
 									</div>
-									<span class="text-[11px] font-semibold text-slate-400 font-['Outfit'] block mt-0.5">
-										{formatRupiah(act.total)}
-									</span>
+									{#if isSelected}
+										<span class="shrink-0 px-1.5 py-0.2 rounded-md text-[9px] font-black uppercase tracking-wider bg-orange-500 text-white shadow-2xs">
+											Aktif
+										</span>
+									{/if}
 								</div>
 
-								<div class="shrink-0 text-right">
-									<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[10px] font-extrabold {info.badge} shadow-xs">
+								<!-- Baris 2: Mini Badge Status + Total Harga -->
+								<div class="flex items-center justify-between gap-1 pt-1.5 border-t {isSelected ? 'border-orange-200/70' : 'border-slate-200/70'}">
+									<span class="inline-flex items-center gap-1 px-1.5 sm:px-2 py-0.5 rounded-lg text-[9px] sm:text-[10px] font-black {info.badge} shadow-2xs truncate">
 										<span>{info.icon}</span>
-										<span>{info.label}</span>
+										<span class="truncate">{info.label}</span>
+									</span>
+									<span class="text-[11px] sm:text-xs font-black font-['Outfit'] shrink-0 {isSelected ? 'text-orange-600' : 'text-slate-600'}">
+										{formatRupiah(act.total)}
 									</span>
 								</div>
 							</a>
