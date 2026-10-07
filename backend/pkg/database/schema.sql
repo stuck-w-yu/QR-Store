@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS restaurants (
     name VARCHAR(255) NOT NULL,
     slug VARCHAR(255) UNIQUE NOT NULL,
     logo_url TEXT,
+    qris_image_url TEXT,
     address TEXT,
     phone VARCHAR(50),
     tax_percent NUMERIC(5,2) DEFAULT 10.00 NOT NULL,

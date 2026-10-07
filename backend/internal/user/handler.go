@@ -16,6 +16,10 @@ type CreateUserRequest struct {
 	Role     auth.Role `json:"role" binding:"required"`
 }
 
+type ResetUserPasswordRequest struct {
+	NewPassword string `json:"new_password" binding:"required,min=6"`
+}
+
 type Handler struct {
 	authRepo    auth.Repository
 	authService auth.Service
@@ -31,6 +35,7 @@ func (h *Handler) RegisterRoutes(r *gin.RouterGroup) {
 		users.GET("", h.ListUsers)
 		users.POST("", h.CreateUser)
 		users.DELETE("/:id", h.DeleteUser)
+		users.PUT("/:id/password", auth.RequireRoles(auth.RoleOwner, auth.RoleSuperadmin), h.ResetUserPassword)
 	}
 }
 
@@ -118,4 +123,45 @@ func (h *Handler) DeleteUser(c *gin.Context) {
 	}
 
 	response.OK(c, gin.H{"deleted": true}, "User deleted successfully")
+}
+
+func (h *Handler) ResetUserPassword(c *gin.Context) {
+	restoID, _ := c.Get(auth.CtxRestaurantID)
+	currentRole, _ := c.Get(auth.CtxRole)
+	targetID := c.Param("id")
+
+	var req ResetUserPasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "INVALID_REQUEST", err.Error())
+		return
+	}
+
+	targetUser, err := h.authRepo.GetByID(c.Request.Context(), targetID)
+	if err != nil {
+		response.NotFound(c, "USER_NOT_FOUND", "Karyawan tidak ditemukan")
+		return
+	}
+
+	if targetUser.RestaurantID != restoID.(string) {
+		response.Forbidden(c, "FORBIDDEN", "Anda tidak memiliki akses ke akun karyawan ini")
+		return
+	}
+
+	// Owner can only change password for roles BELOW them (ADMIN, CASHIER, KITCHEN)
+	if currentRole == auth.RoleOwner {
+		if targetUser.Role == auth.RoleOwner || targetUser.Role == auth.RoleSuperadmin {
+			response.Forbidden(c, "FORBIDDEN", "Owner hanya dapat mengubah kata sandi untuk role di bawahnya (Admin, Kasir, Dapur)")
+			return
+		}
+	} else if currentRole != auth.RoleSuperadmin {
+		response.Forbidden(c, "FORBIDDEN", "Hanya Owner yang memiliki izin mereset kata sandi karyawan")
+		return
+	}
+
+	if err := h.authService.ResetPassword(c.Request.Context(), targetID, req.NewPassword); err != nil {
+		response.InternalServerError(c, "RESET_FAILED", err.Error())
+		return
+	}
+
+	response.OK(c, gin.H{"updated": true}, "Kata sandi karyawan berhasil diperbarui")
 }

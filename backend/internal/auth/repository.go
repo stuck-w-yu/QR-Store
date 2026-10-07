@@ -18,6 +18,7 @@ type Repository interface {
 	Create(ctx context.Context, user *User) error
 	ListByRestaurant(ctx context.Context, restaurantID string) ([]User, error)
 	Delete(ctx context.Context, id, restaurantID string) error
+	UpdatePassword(ctx context.Context, id, passwordHash string) error
 }
 
 type repository struct {
@@ -138,5 +139,11 @@ func (r *repository) ListByRestaurant(ctx context.Context, restaurantID string) 
 func (r *repository) Delete(ctx context.Context, id, restaurantID string) error {
 	query := `DELETE FROM users WHERE id = $1 AND restaurant_id = $2`
 	_, err := r.pool.Exec(ctx, query, id, restaurantID)
+	return err
+}
+
+func (r *repository) UpdatePassword(ctx context.Context, id, passwordHash string) error {
+	query := `UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2`
+	_, err := r.pool.Exec(ctx, query, passwordHash, id)
 	return err
 }

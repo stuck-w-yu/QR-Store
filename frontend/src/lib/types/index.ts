@@ -14,6 +14,7 @@ export interface Restaurant {
 	name: string;
 	slug: string;
 	logo_url?: string;
+	qris_image_url?: string;
 	address?: string;
 	phone?: string;
 	tax_percent: number;
@@ -110,6 +111,7 @@ export interface PublicTableInfo {
 		name: string;
 		slug: string;
 		logo_url?: string;
+		qris_image_url?: string;
 		tax_percent: number;
 		service_percent: number;
 	};

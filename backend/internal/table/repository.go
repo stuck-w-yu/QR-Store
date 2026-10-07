@@ -38,6 +38,7 @@ type PublicTableInfo struct {
 		Name           string  `json:"name"`
 		Slug           string  `json:"slug"`
 		LogoURL        *string `json:"logo_url"`
+		QRISImageURL   *string `json:"qris_image_url"`
 		TaxPercent     float64 `json:"tax_percent"`
 		ServicePercent float64 `json:"service_percent"`
 	} `json:"restaurant"`
@@ -113,7 +114,7 @@ func (r *repository) GetByID(ctx context.Context, id, restaurantID string) (*Tab
 func (r *repository) GetByQRToken(ctx context.Context, qrToken string) (*PublicTableInfo, error) {
 	query := `
 		SELECT 
-			r.id, r.name, r.slug, r.logo_url, r.tax_percent, r.service_percent,
+			r.id, r.name, r.slug, r.logo_url, r.qris_image_url, r.tax_percent, r.service_percent,
 			t.id, t.name, t.qr_token, t.status
 		FROM tables t
 		JOIN restaurants r ON r.id = t.restaurant_id
@@ -122,7 +123,7 @@ func (r *repository) GetByQRToken(ctx context.Context, qrToken string) (*PublicT
 	var info PublicTableInfo
 	err := r.pool.QueryRow(ctx, query, qrToken).Scan(
 		&info.Restaurant.ID, &info.Restaurant.Name, &info.Restaurant.Slug, &info.Restaurant.LogoURL,
-		&info.Restaurant.TaxPercent, &info.Restaurant.ServicePercent,
+		&info.Restaurant.QRISImageURL, &info.Restaurant.TaxPercent, &info.Restaurant.ServicePercent,
 		&info.Table.ID, &info.Table.Name, &info.Table.QRToken, &info.Table.Status,
 	)
 	if err != nil {

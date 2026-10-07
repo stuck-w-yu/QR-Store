@@ -26,6 +26,7 @@
 	let invoiceAutoShown = $state(false);
 	let selectedMethod = $state<'QRIS' | 'CASH'>('QRIS');
 	let activeOrdersList = $state<PublicActiveOrderSummary[]>([]);
+	let tableInfo = $state<PublicTableInfo | null>(null);
 	let isRefreshing = $state(false);
 	let refreshSuccess = $state(false);
 
@@ -60,10 +61,13 @@
 		if (!token) return;
 		try {
 			const info = await api.get<PublicTableInfo>(`/public/tables/${encodeURIComponent(token)}?_t=${Date.now()}`);
-			if (info && Array.isArray(info.active_orders)) {
-				activeOrdersList = info.active_orders;
-			} else {
-				activeOrdersList = [];
+			if (info) {
+				tableInfo = info;
+				if (Array.isArray(info.active_orders)) {
+					activeOrdersList = info.active_orders;
+				} else {
+					activeOrdersList = [];
+				}
 			}
 		} catch (e) {
 			console.warn('Failed to load active orders list', e);
@@ -744,9 +748,17 @@
 							</div>
 
 							<div class="bg-slate-50 p-4 rounded-2xl border border-slate-200 inline-block mx-auto">
-								<div class="w-48 h-48 bg-white border border-slate-300 rounded-xl p-2 mx-auto flex flex-col items-center justify-center">
-									<QrCode class="w-36 h-36 text-slate-800" />
-									<span class="text-[10px] font-mono text-slate-400 font-bold mt-1">QRIS NASIONAL</span>
+								<div class="w-52 h-52 bg-white border border-slate-300 rounded-xl p-2 mx-auto flex flex-col items-center justify-center overflow-hidden shadow-xs">
+									{#if tableInfo?.restaurant?.qris_image_url}
+										<img
+											src={tableInfo.restaurant.qris_image_url}
+											alt="QRIS Toko"
+											class="w-full h-full object-contain rounded-lg"
+										/>
+									{:else}
+										<QrCode class="w-36 h-36 text-slate-800" />
+										<span class="text-[10px] font-mono text-slate-400 font-bold mt-1">QRIS NASIONAL</span>
+									{/if}
 								</div>
 							</div>
 

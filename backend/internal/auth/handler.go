@@ -22,6 +22,8 @@ func (h *Handler) RegisterRoutes(r *gin.RouterGroup) {
 		authGroup.POST("/login", h.Login)
 		authGroup.GET("/me", AuthMiddleware(h.service), h.Me)
 		authGroup.POST("/logout", AuthMiddleware(h.service), h.Logout)
+		authGroup.PUT("/password", AuthMiddleware(h.service), h.ChangePassword)
+		authGroup.POST("/change-password", AuthMiddleware(h.service), h.ChangePassword)
 	}
 }
 
@@ -64,4 +66,30 @@ func (h *Handler) Me(c *gin.Context) {
 
 func (h *Handler) Logout(c *gin.Context) {
 	response.JSON(c, http.StatusOK, gin.H{"logged_out": true}, "Successfully logged out")
+}
+
+func (h *Handler) ChangePassword(c *gin.Context) {
+	userID, _ := c.Get(CtxUserID)
+	idStr, ok := userID.(string)
+	if !ok || idStr == "" {
+		response.Unauthorized(c, "UNAUTHORIZED", "User ID not found in session")
+		return
+	}
+
+	var req ChangePasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "INVALID_REQUEST", err.Error())
+		return
+	}
+
+	if err := h.service.ChangePassword(c.Request.Context(), idStr, req.CurrentPassword, req.NewPassword); err != nil {
+		if errors.Is(err, ErrInvalidCurrentPassword) {
+			response.BadRequest(c, "INVALID_CURRENT_PASSWORD", "Kata sandi saat ini salah")
+			return
+		}
+		response.InternalServerError(c, "CHANGE_PASSWORD_FAILED", "Gagal memperbarui kata sandi")
+		return
+	}
+
+	response.OK(c, gin.H{"updated": true}, "Kata sandi berhasil diperbarui")
 }

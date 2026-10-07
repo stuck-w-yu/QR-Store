@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { api, formatRupiah } from '$lib/api/client';
+	import { uploadToGDrive } from '$lib/services/gdriveBucket';
 	import type { 
 		TenantSummary, PlatformStats, PlatformOrder, 
 		PlatformOwner, SystemHealth 
@@ -13,7 +14,7 @@
 		Lock, Unlock, ChevronRight, QrCode, Phone, Mail, MapPin, Sparkles,
 		Activity, Server, Database, Cpu, Layers, CreditCard, Clock, BadgeCheck,
 		FileText, ArrowDownRight, UserCheck, MessageSquare, Zap, Check, HelpCircle,
-		Download, Radio, Terminal, Laptop
+		Download, Radio, Terminal, Laptop, Upload, Image as ImageIcon, Loader2
 	} from '@lucide/svelte';
 
 	// Tab navigation types
@@ -80,6 +81,8 @@
 	// Edit Form State
 	let editForm = $state({
 		name: '',
+		logo_url: '',
+		qris_image_url: '',
 		phone: '',
 		address: '',
 		plan: 'PRO',
@@ -88,6 +91,10 @@
 		service_percent: 5
 	});
 	let editSubmitting = $state(false);
+	let uploadingLogo = $state(false);
+	let uploadingQris = $state(false);
+	let logoUploadError = $state<string | null>(null);
+	let qrisUploadError = $state<string | null>(null);
 
 	// Audit Logs (Simulated platform events)
 	let auditLogs = $state([
@@ -177,6 +184,8 @@
 		selectedTenant = t;
 		editForm = {
 			name: t.name,
+			logo_url: t.logo_url || '',
+			qris_image_url: t.qris_image_url || '',
 			phone: t.phone || '',
 			address: t.address || '',
 			plan: t.plan || 'PRO',
@@ -184,7 +193,69 @@
 			tax_percent: t.tax_percent,
 			service_percent: t.service_percent
 		};
+		logoUploadError = null;
+		qrisUploadError = null;
 		showEditModal = true;
+	}
+
+	async function handleUploadLogo(e: Event) {
+		const target = e.target as HTMLInputElement;
+		const file = target.files?.[0];
+		if (!file) return;
+
+		uploadingLogo = true;
+		logoUploadError = null;
+		try {
+			const res = await uploadToGDrive(file, {
+				folder: 'tenant-logos',
+				filename: `logo_${selectedTenant?.slug || 'tenant'}_${Date.now()}.jpg`,
+				compress: true,
+				maxWidth: 600,
+				maxHeight: 600,
+				quality: 0.85
+			});
+
+			if (res.status === 'success' && (res.directUrl || res.fileUrl)) {
+				editForm.logo_url = res.directUrl || res.fileUrl || '';
+			} else {
+				logoUploadError = res.message || 'Gagal mengunggah logo ke Google Drive';
+			}
+		} catch (err: any) {
+			logoUploadError = err?.message || 'Gagal mengunggah logo';
+		} finally {
+			uploadingLogo = false;
+			target.value = '';
+		}
+	}
+
+	async function handleUploadQris(e: Event) {
+		const target = e.target as HTMLInputElement;
+		const file = target.files?.[0];
+		if (!file) return;
+
+		uploadingQris = true;
+		qrisUploadError = null;
+		try {
+			const res = await uploadToGDrive(file, {
+				folder: 'tenant-qris',
+				filename: `qris_${selectedTenant?.slug || 'tenant'}_${Date.now()}.jpg`,
+				compress: true,
+				maxWidth: 1200,
+				maxHeight: 1200,
+				quality: 0.9
+			});
+
+			if (res.status === 'success' && (res.directUrl || res.fileUrl)) {
+				editForm.qris_image_url = res.directUrl || res.fileUrl || '';
+			} else {
+				qrisUploadError = res.message || 'Gagal mengunggah foto QRIS ke Google Drive';
+			}
+		} catch (err: any) {
+			qrisUploadError = err?.message || 'Gagal mengunggah foto QRIS';
+		} finally {
+			uploadingQris = false;
+			target.value = '';
+		}
 	}
 
 	async function handleSaveEdit(e: SubmitEvent) {
@@ -938,9 +1009,17 @@
 											DITANGGUHKAN
 										</span>
 									{/if}
-									<span class="px-2 py-0.5 rounded-md text-[10px] font-extrabold uppercase {t.plan === 'ENTERPRISE' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : t.plan === 'PRO' ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30' : 'bg-slate-800 text-slate-400'}">
-										{t.plan || 'PRO'}
-									</span>
+									<div class="flex items-center gap-1">
+										{#if t.qris_image_url}
+											<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30" title="QRIS Aktif">
+												<QrCode class="w-2.5 h-2.5" />
+												QRIS
+											</span>
+										{/if}
+										<span class="px-2 py-0.5 rounded-md text-[10px] font-extrabold uppercase {t.plan === 'ENTERPRISE' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : t.plan === 'PRO' ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30' : 'bg-slate-800 text-slate-400'}">
+											{t.plan || 'PRO'}
+										</span>
+									</div>
 								</div>
 							</div>
 
@@ -1061,14 +1140,22 @@
 												{/if}
 												<div>
 													<span class="font-extrabold text-sm text-white block">{t.name}</span>
-													<a 
-														href={`/public/restaurants/${t.slug}`} 
-														target="_blank"
-														class="text-[11px] text-indigo-400 font-mono hover:underline flex items-center gap-1"
-													>
-														<span>/{t.slug}</span>
-														<ExternalLink class="w-3 h-3" />
-													</a>
+													<div class="flex items-center gap-1.5">
+														<a 
+															href={`/public/restaurants/${t.slug}`} 
+															target="_blank"
+															class="text-[11px] text-indigo-400 font-mono hover:underline flex items-center gap-1"
+														>
+															<span>/{t.slug}</span>
+															<ExternalLink class="w-3 h-3" />
+														</a>
+														{#if t.qris_image_url}
+															<span class="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-500/10 text-amber-300 border border-amber-500/20" title="QRIS Aktif">
+																<QrCode class="w-2.5 h-2.5" />
+																QRIS
+															</span>
+														{/if}
+													</div>
 												</div>
 											</div>
 										</td>
@@ -1854,7 +1941,7 @@
 <!-- Modal 2: Edit Tenant Konfigurasi -->
 {#if showEditModal && selectedTenant}
 	<div class="fixed inset-0 bg-black/70 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-		<div class="bg-slate-900 text-white rounded-3xl p-5 sm:p-7 w-full max-w-md space-y-5 shadow-2xl border border-slate-800 animate-in fade-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
+		<div class="bg-slate-900 text-white rounded-3xl p-5 sm:p-7 w-full max-w-xl space-y-5 shadow-2xl border border-slate-800 animate-in fade-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
 			<div class="flex items-center justify-between border-b border-slate-800 pb-3">
 				<div>
 					<h3 class="text-lg font-black font-['Outfit'] text-white">Ubah Konfigurasi Tenant</h3>
@@ -1869,7 +1956,7 @@
 				</button>
 			</div>
 
-			<form onsubmit={handleSaveEdit} class="space-y-3.5 text-xs font-medium">
+			<form onsubmit={handleSaveEdit} class="space-y-4 text-xs font-medium">
 				<div>
 					<label for="edit-name" class="block font-bold text-slate-300 mb-1">Nama Toko</label>
 					<input
@@ -1952,6 +2039,162 @@
 					/>
 				</div>
 
+				<!-- Bagian Media & Branding: Foto Logo Toko & Foto QRIS Pembayaran -->
+				<div class="pt-3 border-t border-slate-800/80 space-y-3">
+					<div class="flex items-center justify-between">
+						<span class="text-[11px] font-black uppercase tracking-wider text-indigo-400">Media Bisnis & Pembayaran</span>
+						<span class="text-[10px] text-slate-400">Logo & QRIS Klien</span>
+					</div>
+
+					<div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+						<!-- 1. Foto Logo Bisnis Klien -->
+						<div class="bg-slate-950/60 border border-slate-800/90 rounded-2xl p-3.5 flex flex-col justify-between space-y-3">
+							<div>
+								<div class="flex items-center justify-between mb-2">
+									<span class="font-bold text-slate-200 flex items-center gap-1.5">
+										<ImageIcon class="w-3.5 h-3.5 text-indigo-400" />
+										<span>Logo Bisnis</span>
+									</span>
+									{#if editForm.logo_url}
+										<span class="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">Ada</span>
+									{:else}
+										<span class="text-[10px] text-slate-500">Belum ada</span>
+									{/if}
+								</div>
+
+								<!-- Preview Logo Box -->
+								<div class="h-28 w-full bg-slate-900/90 rounded-xl border border-dashed border-slate-700/80 flex items-center justify-center overflow-hidden relative group">
+									{#if editForm.logo_url}
+										<img
+											src={editForm.logo_url}
+											alt="Logo Toko"
+											class="h-full w-full object-contain p-2"
+										/>
+										<button
+											type="button"
+											onclick={() => (editForm.logo_url = '')}
+											title="Hapus Logo"
+											class="absolute top-1.5 right-1.5 p-1.5 rounded-lg bg-rose-600/90 hover:bg-rose-500 text-white shadow-md transition-opacity"
+										>
+											<Trash2 class="w-3.5 h-3.5" />
+										</button>
+									{:else}
+										<div class="flex flex-col items-center justify-center text-slate-500 text-center p-2">
+											<div class="w-10 h-10 rounded-xl bg-slate-800/80 flex items-center justify-center mb-1 text-slate-400">
+												<Store class="w-5 h-5 text-indigo-400" />
+											</div>
+											<span class="text-[11px] text-slate-400">Unggah file foto logo</span>
+										</div>
+									{/if}
+								</div>
+								{#if logoUploadError}
+									<p class="text-[10px] text-rose-400 mt-1 font-bold">{logoUploadError}</p>
+								{/if}
+							</div>
+
+							<div class="space-y-1.5">
+								<label
+									class="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 hover:text-indigo-200 border border-indigo-500/30 cursor-pointer font-bold text-xs transition-colors {uploadingLogo ? 'opacity-50 pointer-events-none' : ''}"
+								>
+									{#if uploadingLogo}
+										<Loader2 class="w-3.5 h-3.5 animate-spin text-indigo-400" />
+										<span>Mengunggah...</span>
+									{:else}
+										<Upload class="w-3.5 h-3.5 text-indigo-400" />
+										<span>{editForm.logo_url ? 'Ganti Foto Logo' : 'Unggah Foto Logo'}</span>
+									{/if}
+									<input
+										type="file"
+										accept="image/*"
+										class="hidden"
+										onchange={handleUploadLogo}
+										disabled={uploadingLogo}
+									/>
+								</label>
+								<input
+									type="url"
+									placeholder="Atau tautan URL logo..."
+									bind:value={editForm.logo_url}
+									class="w-full px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-[11px] text-slate-300 placeholder-slate-600 focus:outline-none focus:border-indigo-500"
+								/>
+							</div>
+						</div>
+
+						<!-- 2. Foto QRIS Pembayaran Toko Klien -->
+						<div class="bg-slate-950/60 border border-slate-800/90 rounded-2xl p-3.5 flex flex-col justify-between space-y-3">
+							<div>
+								<div class="flex items-center justify-between mb-2">
+									<span class="font-bold text-slate-200 flex items-center gap-1.5">
+										<QrCode class="w-3.5 h-3.5 text-amber-400" />
+										<span>Foto QRIS Klien</span>
+									</span>
+									{#if editForm.qris_image_url}
+										<span class="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">Aktif</span>
+									{:else}
+										<span class="text-[10px] text-slate-500">Belum ada</span>
+									{/if}
+								</div>
+
+								<!-- Preview QRIS Box -->
+								<div class="h-28 w-full bg-slate-900/90 rounded-xl border border-dashed border-slate-700/80 flex items-center justify-center overflow-hidden relative group">
+									{#if editForm.qris_image_url}
+										<img
+											src={editForm.qris_image_url}
+											alt="QRIS Toko"
+											class="h-full w-full object-contain p-2"
+										/>
+										<button
+											type="button"
+											onclick={() => (editForm.qris_image_url = '')}
+											title="Hapus QRIS"
+											class="absolute top-1.5 right-1.5 p-1.5 rounded-lg bg-rose-600/90 hover:bg-rose-500 text-white shadow-md transition-opacity"
+										>
+											<Trash2 class="w-3.5 h-3.5" />
+										</button>
+									{:else}
+										<div class="flex flex-col items-center justify-center text-slate-500 text-center p-2">
+											<div class="w-10 h-10 rounded-xl bg-slate-800/80 flex items-center justify-center mb-1 text-slate-400">
+												<QrCode class="w-5 h-5 text-amber-400" />
+											</div>
+											<span class="text-[11px] text-slate-400">Unggah foto QRIS klien</span>
+										</div>
+									{/if}
+								</div>
+								{#if qrisUploadError}
+									<p class="text-[10px] text-rose-400 mt-1 font-bold">{qrisUploadError}</p>
+								{/if}
+							</div>
+
+							<div class="space-y-1.5">
+								<label
+									class="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 hover:text-amber-200 border border-amber-500/30 cursor-pointer font-bold text-xs transition-colors {uploadingQris ? 'opacity-50 pointer-events-none' : ''}"
+								>
+									{#if uploadingQris}
+										<Loader2 class="w-3.5 h-3.5 animate-spin text-amber-400" />
+										<span>Mengunggah...</span>
+									{:else}
+										<Upload class="w-3.5 h-3.5 text-amber-400" />
+										<span>{editForm.qris_image_url ? 'Ganti Foto QRIS' : 'Unggah Foto QRIS'}</span>
+									{/if}
+									<input
+										type="file"
+										accept="image/*"
+										class="hidden"
+										onchange={handleUploadQris}
+										disabled={uploadingQris}
+									/>
+								</label>
+								<input
+									type="url"
+									placeholder="Atau tautan URL QRIS..."
+									bind:value={editForm.qris_image_url}
+									class="w-full px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-[11px] text-slate-300 placeholder-slate-600 focus:outline-none focus:border-amber-500"
+								/>
+							</div>
+						</div>
+					</div>
+				</div>
+
 				<div class="pt-4 flex items-center justify-end gap-3 border-t border-slate-800">
 					<button
 						type="button"
@@ -1962,10 +2205,15 @@
 					</button>
 					<button
 						type="submit"
-						disabled={editSubmitting}
-						class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold shadow-lg shadow-indigo-600/30 disabled:opacity-50 transition-all"
+						disabled={editSubmitting || uploadingLogo || uploadingQris}
+						class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold shadow-lg shadow-indigo-600/30 disabled:opacity-50 transition-all flex items-center gap-2"
 					>
-						{editSubmitting ? 'Menyimpan...' : 'Simpan Perubahan'}
+						{#if editSubmitting}
+							<Loader2 class="w-4 h-4 animate-spin text-white" />
+							<span>Menyimpan...</span>
+						{:else}
+							<span>Simpan Perubahan</span>
+						{/if}
 					</button>
 				</div>
 			</form>
@@ -2056,6 +2304,28 @@
 					<span class="text-white text-right max-w-xs">{selectedTenant.address || '-'}</span>
 				</div>
 			</div>
+
+			<!-- Branding & QRIS Snapshot -->
+			{#if selectedTenant.logo_url || selectedTenant.qris_image_url}
+				<div class="grid grid-cols-2 gap-3 pt-1">
+					<div class="p-3 bg-slate-950/60 rounded-2xl border border-slate-800 text-center">
+						<span class="text-[10px] text-slate-400 font-bold uppercase block mb-1.5">Logo Bisnis</span>
+						{#if selectedTenant.logo_url}
+							<img src={selectedTenant.logo_url} alt="Logo" class="w-16 h-16 object-contain rounded-xl mx-auto border border-slate-800 bg-slate-900" />
+						{:else}
+							<span class="text-xs text-slate-500 italic block py-4">Belum diatur</span>
+						{/if}
+					</div>
+					<div class="p-3 bg-slate-950/60 rounded-2xl border border-slate-800 text-center">
+						<span class="text-[10px] text-slate-400 font-bold uppercase block mb-1.5">QRIS Pembayaran</span>
+						{#if selectedTenant.qris_image_url}
+							<img src={selectedTenant.qris_image_url} alt="QRIS" class="w-16 h-16 object-contain rounded-xl mx-auto border border-slate-800 bg-white p-1" />
+						{:else}
+							<span class="text-xs text-slate-500 italic block py-4">Belum diatur</span>
+						{/if}
+					</div>
+				</div>
+			{/if}
 
 			<!-- Quick Simulation Link -->
 			<div class="pt-3 border-t border-slate-800 flex items-center justify-between">

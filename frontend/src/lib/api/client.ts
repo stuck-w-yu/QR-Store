@@ -115,6 +115,13 @@ class APIClient {
 		});
 	}
 
+	put<T>(endpoint: string, body?: any): Promise<T> {
+		return this.request<T>(endpoint, {
+			method: 'PUT',
+			body: body ? JSON.stringify(body) : undefined
+		});
+	}
+
 	patch<T>(endpoint: string, body?: any): Promise<T> {
 		return this.request<T>(endpoint, {
 			method: 'PATCH',

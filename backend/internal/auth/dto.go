@@ -18,3 +18,8 @@ type AuthResponse struct {
 	User        UserDTO `json:"user"`
 	AccessToken string  `json:"access_token"`
 }
+
+type ChangePasswordRequest struct {
+	CurrentPassword string `json:"current_password" binding:"required"`
+	NewPassword     string `json:"new_password" binding:"required,min=6"`
+}

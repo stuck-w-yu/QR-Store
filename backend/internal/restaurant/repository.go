@@ -21,6 +21,7 @@ type Restaurant struct {
 	Name           string    `json:"name"`
 	Slug           string    `json:"slug"`
 	LogoURL        *string   `json:"logo_url"`
+	QRISImageURL   *string   `json:"qris_image_url"`
 	Address        *string   `json:"address"`
 	Phone          *string   `json:"phone"`
 	TaxPercent     float64   `json:"tax_percent"`
@@ -98,6 +99,7 @@ type OnboardTenantRequest struct {
 	Name           string  `json:"name" binding:"required"`
 	Slug           string  `json:"slug" binding:"required"`
 	LogoURL        *string `json:"logo_url"`
+	QRISImageURL   *string `json:"qris_image_url"`
 	Address        *string `json:"address"`
 	Phone          *string `json:"phone"`
 	TaxPercent     float64 `json:"tax_percent"`
@@ -111,6 +113,7 @@ type OnboardTenantRequest struct {
 type UpdateRestaurantRequest struct {
 	Name           *string  `json:"name"`
 	LogoURL        *string  `json:"logo_url"`
+	QRISImageURL   *string  `json:"qris_image_url"`
 	Address        *string  `json:"address"`
 	Phone          *string  `json:"phone"`
 	TaxPercent     *float64 `json:"tax_percent"`
@@ -143,13 +146,13 @@ func NewRepository(pool *pgxpool.Pool) Repository {
 
 func (r *repository) GetByID(ctx context.Context, id string) (*Restaurant, error) {
 	query := `
-		SELECT id, name, slug, logo_url, address, phone, tax_percent, service_percent, status, COALESCE(plan, 'PRO'), created_at, updated_at
+		SELECT id, name, slug, logo_url, qris_image_url, address, phone, tax_percent, service_percent, status, COALESCE(plan, 'PRO'), created_at, updated_at
 		FROM restaurants
 		WHERE id = $1
 	`
 	var res Restaurant
 	err := r.pool.QueryRow(ctx, query, id).Scan(
-		&res.ID, &res.Name, &res.Slug, &res.LogoURL, &res.Address, &res.Phone,
+		&res.ID, &res.Name, &res.Slug, &res.LogoURL, &res.QRISImageURL, &res.Address, &res.Phone,
 		&res.TaxPercent, &res.ServicePercent, &res.Status, &res.Plan, &res.CreatedAt, &res.UpdatedAt,
 	)
 	if err != nil {
@@ -163,13 +166,13 @@ func (r *repository) GetByID(ctx context.Context, id string) (*Restaurant, error
 
 func (r *repository) GetBySlug(ctx context.Context, slug string) (*Restaurant, error) {
 	query := `
-		SELECT id, name, slug, logo_url, address, phone, tax_percent, service_percent, status, COALESCE(plan, 'PRO'), created_at, updated_at
+		SELECT id, name, slug, logo_url, qris_image_url, address, phone, tax_percent, service_percent, status, COALESCE(plan, 'PRO'), created_at, updated_at
 		FROM restaurants
 		WHERE slug = $1
 	`
 	var res Restaurant
 	err := r.pool.QueryRow(ctx, query, slug).Scan(
-		&res.ID, &res.Name, &res.Slug, &res.LogoURL, &res.Address, &res.Phone,
+		&res.ID, &res.Name, &res.Slug, &res.LogoURL, &res.QRISImageURL, &res.Address, &res.Phone,
 		&res.TaxPercent, &res.ServicePercent, &res.Status, &res.Plan, &res.CreatedAt, &res.UpdatedAt,
 	)
 	if err != nil {
@@ -187,11 +190,11 @@ func (r *repository) Create(ctx context.Context, res *Restaurant) error {
 		plan = "PRO"
 	}
 	query := `
-		INSERT INTO restaurants (id, name, slug, logo_url, address, phone, tax_percent, service_percent, status, plan, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+		INSERT INTO restaurants (id, name, slug, logo_url, qris_image_url, address, phone, tax_percent, service_percent, status, plan, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 	`
 	_, err := r.pool.Exec(ctx, query,
-		res.ID, res.Name, res.Slug, res.LogoURL, res.Address, res.Phone,
+		res.ID, res.Name, res.Slug, res.LogoURL, res.QRISImageURL, res.Address, res.Phone,
 		res.TaxPercent, res.ServicePercent, res.Status, plan, res.CreatedAt, res.UpdatedAt,
 	)
 	return err
@@ -208,6 +211,9 @@ func (r *repository) Update(ctx context.Context, id string, req UpdateRestaurant
 	}
 	if req.LogoURL != nil {
 		current.LogoURL = req.LogoURL
+	}
+	if req.QRISImageURL != nil {
+		current.QRISImageURL = req.QRISImageURL
 	}
 	if req.Address != nil {
 		current.Address = req.Address
@@ -231,12 +237,12 @@ func (r *repository) Update(ctx context.Context, id string, req UpdateRestaurant
 
 	query := `
 		UPDATE restaurants
-		SET name = $1, logo_url = $2, address = $3, phone = $4, tax_percent = $5, service_percent = $6, status = $7, plan = $8, updated_at = $9
-		WHERE id = $10
+		SET name = $1, logo_url = $2, address = $3, phone = $4, tax_percent = $5, service_percent = $6, status = $7, plan = $8, updated_at = $9, qris_image_url = $10
+		WHERE id = $11
 	`
 	_, err = r.pool.Exec(ctx, query,
 		current.Name, current.LogoURL, current.Address, current.Phone,
-		current.TaxPercent, current.ServicePercent, current.Status, current.Plan, current.UpdatedAt, id,
+		current.TaxPercent, current.ServicePercent, current.Status, current.Plan, current.UpdatedAt, current.QRISImageURL, id,
 	)
 	if err != nil {
 		return nil, err
@@ -247,7 +253,7 @@ func (r *repository) Update(ctx context.Context, id string, req UpdateRestaurant
 func (r *repository) ListTenants(ctx context.Context) ([]TenantSummary, error) {
 	query := `
 		SELECT 
-			r.id, r.name, r.slug, r.logo_url, r.address, r.phone, r.tax_percent, r.service_percent, r.status, 
+			r.id, r.name, r.slug, r.logo_url, r.qris_image_url, r.address, r.phone, r.tax_percent, r.service_percent, r.status, 
 			COALESCE(r.plan, 'PRO') as plan, r.created_at, r.updated_at,
 			COALESCE(u.name, 'Belum Diatur') as owner_name,
 			COALESCE(u.email, '-') as owner_email,
@@ -272,7 +278,7 @@ func (r *repository) ListTenants(ctx context.Context) ([]TenantSummary, error) {
 	for rows.Next() {
 		var t TenantSummary
 		err := rows.Scan(
-			&t.ID, &t.Name, &t.Slug, &t.LogoURL, &t.Address, &t.Phone,
+			&t.ID, &t.Name, &t.Slug, &t.LogoURL, &t.QRISImageURL, &t.Address, &t.Phone,
 			&t.TaxPercent, &t.ServicePercent, &t.Status, &t.Plan, &t.CreatedAt, &t.UpdatedAt,
 			&t.OwnerName, &t.OwnerEmail, &t.OwnerPhone,
 			&t.TotalTables, &t.TotalMenus, &t.TotalOrders, &t.TotalRevenue,
@@ -355,11 +361,11 @@ func (r *repository) OnboardTenant(ctx context.Context, req OnboardTenantRequest
 
 	// 1. Insert Restaurant
 	restoQuery := `
-		INSERT INTO restaurants (id, name, slug, logo_url, address, phone, tax_percent, service_percent, status, plan, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+		INSERT INTO restaurants (id, name, slug, logo_url, qris_image_url, address, phone, tax_percent, service_percent, status, plan, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 	`
 	_, err = tx.Exec(ctx, restoQuery,
-		restoID, req.Name, req.Slug, req.LogoURL, req.Address, req.Phone,
+		restoID, req.Name, req.Slug, req.LogoURL, req.QRISImageURL, req.Address, req.Phone,
 		req.TaxPercent, req.ServicePercent, "ACTIVE", plan, now, now,
 	)
 	if err != nil {
@@ -421,6 +427,7 @@ func (r *repository) OnboardTenant(ctx context.Context, req OnboardTenantRequest
 			Name:           req.Name,
 			Slug:           req.Slug,
 			LogoURL:        req.LogoURL,
+			QRISImageURL:   req.QRISImageURL,
 			Address:        req.Address,
 			Phone:          req.Phone,
 			TaxPercent:     req.TaxPercent,

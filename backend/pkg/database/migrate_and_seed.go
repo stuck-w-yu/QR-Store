@@ -21,6 +21,7 @@ func RunMigrationsAndSeed(ctx context.Context, db *DB) error {
 
 	// Ensure new schema columns exist
 	_, _ = db.Pool.Exec(ctx, "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS plan VARCHAR(50) DEFAULT 'PRO'")
+	_, _ = db.Pool.Exec(ctx, "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS qris_image_url TEXT")
 	_, _ = db.Pool.Exec(ctx, "ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_status VARCHAR(50) DEFAULT 'UNPAID' NOT NULL")
 	_, _ = db.Pool.Exec(ctx, "ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_method VARCHAR(50)")
 	_, _ = db.Pool.Exec(ctx, "ALTER TABLE orders ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ")
