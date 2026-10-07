@@ -1,22 +1,22 @@
-:80 {
+:{$CADDY_PORT:80} {
     # Real-time WebSocket connection
     handle /ws* {
-        reverse_proxy backend:8080
+        reverse_proxy {$BACKEND_HOST:127.0.0.1}:{$APP_PORT:8080}
     }
 
     # REST API Endpoints
     handle /api/* {
-        reverse_proxy backend:8080
+        reverse_proxy {$BACKEND_HOST:127.0.0.1}:{$APP_PORT:8080}
     }
 
     # Public Health Check
     handle /health* {
-        reverse_proxy backend:8080
+        reverse_proxy {$BACKEND_HOST:127.0.0.1}:{$APP_PORT:8080}
     }
 
     # SvelteKit Web Application
     handle {
-        reverse_proxy frontend:3000
+        reverse_proxy {$FRONTEND_HOST:127.0.0.1}:{$FRONTEND_PORT:3000}
     }
 
     encode zstd gzip

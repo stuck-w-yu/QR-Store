@@ -714,26 +714,15 @@
 								</span>
 							</span>
 
-							<div class="flex items-center gap-1.5 shrink-0">
-								<button
-									type="button"
-									onclick={() => openEditModal(order)}
-									class="px-2 py-0.5 rounded-lg bg-white hover:bg-orange-50 hover:text-orange-600 text-slate-600 font-bold text-[11px] border border-slate-200 shadow-2xs transition-colors flex items-center gap-1 cursor-pointer"
-									title="Kelola / Edit Status Pesanan (CRUD)"
-								>
-									<SlidersHorizontal class="w-3 h-3 text-orange-600" />
-									<span>Kelola (CRUD)</span>
-								</button>
-								<button
-									type="button"
-									onclick={() => openDeleteModal(order)}
-									class="px-2 py-0.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold text-[11px] border border-rose-200 shadow-2xs transition-colors flex items-center gap-1 cursor-pointer"
-									title="Hapus Pesanan Ini"
-								>
-									<Trash2 class="w-3 h-3" />
-									<span>Hapus</span>
-								</button>
-							</div>
+							<button
+								type="button"
+								onclick={() => openDeleteModal(order)}
+								class="px-2.5 py-1 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold text-[11px] border border-rose-200 shadow-2xs transition-colors flex items-center gap-1 cursor-pointer shrink-0"
+								title="Hapus Pesanan Ini"
+							>
+								<Trash2 class="w-3.5 h-3.5" />
+								<span>Hapus</span>
+							</button>
 						</div>
 					</div>
 

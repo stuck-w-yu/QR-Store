@@ -1,0 +1,45 @@
+# Version control
+.git
+.gitignore
+.dockerignore
+
+# Documentation & Project Files
+README.md
+PRD/
+gas/
+vercel.json
+
+# Backend build artifacts & local env
+backend/.env
+backend/.env.*
+backend/*.env
+backend/server
+backend/bin/
+backend/tmp/
+backend/*.exe
+backend/*.test
+backend/*.out
+backend/__debug_bin
+backend/vendor/
+backend/*_test.go
+backend/coverage.*
+
+# Frontend build artifacts & local dependencies
+frontend/.env
+frontend/.env.*
+frontend/*.env
+frontend/node_modules/
+frontend/build/
+frontend/.svelte-kit/
+frontend/.output/
+frontend/dist/
+frontend/*.log*
+frontend/.pnpm-store/
+
+# IDE & OS temporary files
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
