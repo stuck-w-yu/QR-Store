@@ -65,6 +65,7 @@ COPY --from=frontend-builder /app/build ./build
 # Set up Caddy configuration and container supervisor script
 WORKDIR /app
 COPY Caddyfile /etc/caddy/Caddyfile
+RUN caddy fmt --overwrite /etc/caddy/Caddyfile
 COPY start.sh /app/start.sh
 RUN chmod +x /app/start.sh
 

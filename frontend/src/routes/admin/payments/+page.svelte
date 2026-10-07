@@ -1124,7 +1124,7 @@
 
 					{#if getOrderProof(paymentModalOrder)}
 						{@const proof = getOrderProof(paymentModalOrder)!}
-						<div class="p-4 bg-gradient-to-br from-amber-50/90 to-orange-50/80 border-2 border-orange-200/90 rounded-2xl space-y-3 shadow-xs text-left">
+						<div class="p-4 bg-linear-to-br from-amber-50/90 to-orange-50/80 border-2 border-orange-200/90 rounded-2xl space-y-3 shadow-xs text-left">
 							<div class="flex items-center justify-between">
 								<div class="flex items-center gap-1.5 text-xs font-extrabold text-amber-950">
 									<Camera class="w-4 h-4 text-orange-600" />
