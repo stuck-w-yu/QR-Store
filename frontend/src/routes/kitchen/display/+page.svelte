@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { api } from '$lib/api/client';
+	import { api, getWebSocketURL } from '$lib/api/client';
 	import { auth } from '$lib/stores/auth.svelte';
 	import type { Order } from '$lib/types';
 	import { 
@@ -80,7 +80,7 @@
 		const restoId = auth.user?.restaurant_id || 'rst_nusantara';
 		const channel = `restaurant:${restoId}:kitchen`;
 
-		const wsURL = import.meta.env.VITE_WS_URL || 'ws://localhost:8080/ws';
+		const wsURL = getWebSocketURL();
 		try {
 			if (ws) {
 				try { ws.close(); } catch (_) {}

@@ -2,7 +2,7 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
-	import { api, formatRupiah } from '$lib/api/client';
+	import { api, formatRupiah, getWebSocketURL } from '$lib/api/client';
 	import { cart } from '$lib/stores/cart.svelte';
 	import type { Order, Payment, PublicTableInfo, PublicActiveOrderSummary } from '$lib/types';
 	import confetti from 'canvas-confetti';
@@ -257,7 +257,7 @@
 			ws = null;
 		}
 
-		const wsURL = import.meta.env.VITE_WS_URL || 'ws://localhost:8080/ws';
+		const wsURL = getWebSocketURL();
 		const channel = `order:${currentId}`;
 
 		try {
