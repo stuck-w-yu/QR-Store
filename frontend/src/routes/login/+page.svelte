@@ -1,10 +1,10 @@
 <script lang="ts">
 	import { auth } from '$lib/stores/auth.svelte';
 	import { goto } from '$app/navigation';
-	import { Store, Lock, Mail, ArrowRight, ShieldCheck } from '@lucide/svelte';
+	import { Store, Lock, Mail, ArrowRight } from '@lucide/svelte';
 
-	let email = $state('admin@resto.com');
-	let password = $state('password123');
+	let email = $state('');
+	let password = $state('');
 	let error = $state<string | null>(null);
 	let loading = $state(false);
 
@@ -26,11 +26,6 @@
 		} finally {
 			loading = false;
 		}
-	}
-
-	function quickSelectRole(roleEmail: string) {
-		email = roleEmail;
-		password = 'password123';
 	}
 </script>
 
@@ -60,6 +55,7 @@
 						type="email"
 						bind:value={email}
 						required
+						placeholder="nama@email.com"
 						class="w-full text-xs pl-10 pr-3.5 py-3 rounded-xl border border-slate-200 focus:outline-none focus:border-orange-500 font-medium"
 					/>
 				</div>
@@ -74,6 +70,7 @@
 						type="password"
 						bind:value={password}
 						required
+						placeholder="••••••••"
 						class="w-full text-xs pl-10 pr-3.5 py-3 rounded-xl border border-slate-200 focus:outline-none focus:border-orange-500 font-medium"
 					/>
 				</div>
@@ -93,63 +90,5 @@
 				{/if}
 			</button>
 		</form>
-
-		<!-- Quick Demo Role Switcher -->
-		<div class="pt-4 border-t border-slate-100">
-			<span class="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2.5 text-center">
-				Pilihan Akun Cepat
-			</span>
-
-			<button
-				type="button"
-				onclick={() => quickSelectRole('superadmin@qrstore.id')}
-				class="w-full mb-2.5 p-2.5 rounded-xl border border-indigo-200 bg-indigo-50/80 hover:border-indigo-500 text-left transition-colors font-medium flex items-center justify-between group"
-			>
-				<div>
-					<div class="font-bold text-indigo-950 flex items-center gap-1.5 text-xs">
-						<span>👑 Superadmin Platform</span>
-					</div>
-					<div class="text-[10px] text-indigo-600 font-mono">superadmin@qrstore.id</div>
-				</div>
-				<span class="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-md bg-indigo-600 text-white group-hover:bg-indigo-700 transition-colors">
-					Central
-				</span>
-			</button>
-
-			<div class="grid grid-cols-2 gap-2 text-xs">
-				<button
-					type="button"
-					onclick={() => quickSelectRole('owner@resto.com')}
-					class="p-2 rounded-xl border border-slate-200 hover:border-orange-500 text-left transition-colors font-medium bg-slate-50"
-				>
-					<div class="font-bold text-slate-900">Owner</div>
-					<div class="text-[10px] text-slate-500">owner@resto.com</div>
-				</button>
-				<button
-					type="button"
-					onclick={() => quickSelectRole('admin@resto.com')}
-					class="p-2 rounded-xl border border-slate-200 hover:border-orange-500 text-left transition-colors font-medium bg-slate-50"
-				>
-					<div class="font-bold text-slate-900">Admin</div>
-					<div class="text-[10px] text-slate-500">admin@resto.com</div>
-				</button>
-				<button
-					type="button"
-					onclick={() => quickSelectRole('cashier@resto.com')}
-					class="p-2 rounded-xl border border-slate-200 hover:border-orange-500 text-left transition-colors font-medium bg-slate-50"
-				>
-					<div class="font-bold text-slate-900">Kasir</div>
-					<div class="text-[10px] text-slate-500">cashier@resto.com</div>
-				</button>
-				<button
-					type="button"
-					onclick={() => quickSelectRole('kitchen@resto.com')}
-					class="p-2 rounded-xl border border-slate-200 hover:border-orange-500 text-left transition-colors font-medium bg-slate-50"
-				>
-					<div class="font-bold text-slate-900">Dapur (KDS)</div>
-					<div class="text-[10px] text-slate-500">kitchen@resto.com</div>
-				</button>
-			</div>
-		</div>
 	</div>
 </div>
