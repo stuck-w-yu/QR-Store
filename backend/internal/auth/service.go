@@ -13,6 +13,8 @@ import (
 var (
 	ErrInvalidCredentials     = errors.New("invalid email or password")
 	ErrInvalidCurrentPassword = errors.New("current password does not match")
+	ErrEmailAlreadyExists     = errors.New("email is already in use")
+	ErrIDAlreadyExists        = errors.New("user ID is already in use")
 )
 
 type Claims struct {
@@ -29,6 +31,7 @@ type Service interface {
 	GetUserByID(ctx context.Context, id string) (*UserDTO, error)
 	ChangePassword(ctx context.Context, userID, currentPassword, newPassword string) error
 	ResetPassword(ctx context.Context, targetUserID, newPassword string) error
+	UpdateAccount(ctx context.Context, userID string, req UpdateAccountRequest) (*AuthResponse, error)
 }
 
 type service struct {
@@ -155,3 +158,91 @@ func (s *service) ResetPassword(ctx context.Context, targetUserID, newPassword s
 
 	return s.repo.UpdatePassword(ctx, targetUserID, hash)
 }
+
+func (s *service) UpdateAccount(ctx context.Context, userID string, req UpdateAccountRequest) (*AuthResponse, error) {
+	user, err := s.repo.GetByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	// 1. Verifikasi kata sandi saat ini
+	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.CurrentPassword)); err != nil {
+		return nil, ErrInvalidCurrentPassword
+	}
+
+	currentID := user.ID
+
+	// 2. Jika mengganti ID akun (hanya diperbolehkan jika tidak bentrok)
+	if req.NewID != nil && *req.NewID != "" && *req.NewID != currentID {
+		newID := *req.NewID
+		exists, err := s.repo.CheckIDExists(ctx, newID)
+		if err != nil {
+			return nil, err
+		}
+		if exists {
+			return nil, ErrIDAlreadyExists
+		}
+
+		if err := s.repo.UpdateUserID(ctx, currentID, newID); err != nil {
+			return nil, fmt.Errorf("gagal memperbarui ID pengguna: %w", err)
+		}
+		currentID = newID
+		user.ID = newID
+	}
+
+	// 3. Jika mengganti Email login
+	if req.Email != nil && *req.Email != "" && *req.Email != user.Email {
+		newEmail := *req.Email
+		exists, err := s.repo.CheckEmailExists(ctx, newEmail, currentID)
+		if err != nil {
+			return nil, err
+		}
+		if exists {
+			return nil, ErrEmailAlreadyExists
+		}
+		user.Email = newEmail
+	}
+
+	// 4. Jika mengganti Nama
+	if req.Name != nil && *req.Name != "" {
+		user.Name = *req.Name
+	}
+
+	// 5. Jika mengganti Kata Sandi baru
+	if req.NewPassword != nil && *req.NewPassword != "" {
+		if len(*req.NewPassword) < 6 {
+			return nil, errors.New("kata sandi baru minimal 6 karakter")
+		}
+		newHash, err := s.HashPassword(*req.NewPassword)
+		if err != nil {
+			return nil, fmt.Errorf("gagal memproses hash kata sandi: %w", err)
+		}
+		user.PasswordHash = newHash
+	}
+
+	user.UpdatedAt = time.Now()
+
+	// 6. Simpan detail user di database
+	if err := s.repo.UpdateUser(ctx, user); err != nil {
+		return nil, fmt.Errorf("gagal memperbarui detail akun: %w", err)
+	}
+
+	// 7. Generate JWT access token baru yang merefleksikan perubahan
+	token, err := s.generateToken(user)
+	if err != nil {
+		return nil, fmt.Errorf("gagal membuat token baru: %w", err)
+	}
+
+	return &AuthResponse{
+		User: UserDTO{
+			ID:           user.ID,
+			RestaurantID: user.RestaurantID,
+			Name:         user.Name,
+			Email:        user.Email,
+			Role:         user.Role,
+			Status:       user.Status,
+		},
+		AccessToken: token,
+	}, nil
+}
+

@@ -52,6 +52,13 @@ class AuthStore {
 		this.user = null;
 	}
 
+	updateUser(user: User, token?: string) {
+		if (token) {
+			api.setToken(token);
+		}
+		this.user = user;
+	}
+
 	hasRole(...roles: Role[]): boolean {
 		if (!this.user) return false;
 		return roles.includes(this.user.role);

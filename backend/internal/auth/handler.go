@@ -24,6 +24,7 @@ func (h *Handler) RegisterRoutes(r *gin.RouterGroup) {
 		authGroup.POST("/logout", AuthMiddleware(h.service), h.Logout)
 		authGroup.PUT("/password", AuthMiddleware(h.service), h.ChangePassword)
 		authGroup.POST("/change-password", AuthMiddleware(h.service), h.ChangePassword)
+		authGroup.PUT("/account", AuthMiddleware(h.service), h.UpdateAccount)
 	}
 }
 
@@ -93,3 +94,39 @@ func (h *Handler) ChangePassword(c *gin.Context) {
 
 	response.OK(c, gin.H{"updated": true}, "Kata sandi berhasil diperbarui")
 }
+
+func (h *Handler) UpdateAccount(c *gin.Context) {
+	userID, _ := c.Get(CtxUserID)
+	idStr, ok := userID.(string)
+	if !ok || idStr == "" {
+		response.Unauthorized(c, "UNAUTHORIZED", "User ID not found in session")
+		return
+	}
+
+	var req UpdateAccountRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "INVALID_REQUEST", err.Error())
+		return
+	}
+
+	resp, err := h.service.UpdateAccount(c.Request.Context(), idStr, req)
+	if err != nil {
+		if errors.Is(err, ErrInvalidCurrentPassword) {
+			response.BadRequest(c, "INVALID_CURRENT_PASSWORD", "Kata sandi saat ini salah")
+			return
+		}
+		if errors.Is(err, ErrEmailAlreadyExists) {
+			response.BadRequest(c, "EMAIL_EXISTS", "Alamat email sudah digunakan oleh akun lain")
+			return
+		}
+		if errors.Is(err, ErrIDAlreadyExists) {
+			response.BadRequest(c, "ID_EXISTS", "ID pengguna sudah digunakan")
+			return
+		}
+		response.InternalServerError(c, "UPDATE_FAILED", err.Error())
+		return
+	}
+
+	response.OK(c, resp, "Akun berhasil diperbarui")
+}
+

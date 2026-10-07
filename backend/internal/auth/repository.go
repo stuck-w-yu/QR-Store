@@ -19,6 +19,10 @@ type Repository interface {
 	ListByRestaurant(ctx context.Context, restaurantID string) ([]User, error)
 	Delete(ctx context.Context, id, restaurantID string) error
 	UpdatePassword(ctx context.Context, id, passwordHash string) error
+	UpdateUser(ctx context.Context, user *User) error
+	UpdateUserID(ctx context.Context, oldID, newID string) error
+	CheckEmailExists(ctx context.Context, email, excludeID string) (bool, error)
+	CheckIDExists(ctx context.Context, id string) (bool, error)
 }
 
 type repository struct {
@@ -147,3 +151,34 @@ func (r *repository) UpdatePassword(ctx context.Context, id, passwordHash string
 	_, err := r.pool.Exec(ctx, query, passwordHash, id)
 	return err
 }
+
+func (r *repository) UpdateUser(ctx context.Context, u *User) error {
+	query := `
+		UPDATE users
+		SET name = $1, email = $2, password_hash = $3, updated_at = $4
+		WHERE id = $5
+	`
+	_, err := r.pool.Exec(ctx, query, u.Name, u.Email, u.PasswordHash, u.UpdatedAt, u.ID)
+	return err
+}
+
+func (r *repository) UpdateUserID(ctx context.Context, oldID, newID string) error {
+	query := `UPDATE users SET id = $1, updated_at = NOW() WHERE id = $2`
+	_, err := r.pool.Exec(ctx, query, newID, oldID)
+	return err
+}
+
+func (r *repository) CheckEmailExists(ctx context.Context, email, excludeID string) (bool, error) {
+	query := `SELECT COUNT(*) FROM users WHERE email = $1 AND id != $2`
+	var count int
+	err := r.pool.QueryRow(ctx, query, email, excludeID).Scan(&count)
+	return count > 0, err
+}
+
+func (r *repository) CheckIDExists(ctx context.Context, id string) (bool, error) {
+	query := `SELECT COUNT(*) FROM users WHERE id = $1`
+	var count int
+	err := r.pool.QueryRow(ctx, query, id).Scan(&count)
+	return count > 0, err
+}
+
