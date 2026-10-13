@@ -142,7 +142,7 @@
 		}
 		const startTime = Date.now();
 		try {
-			const o = await api.get<Order>(`/public/orders/${currentId}?_t=${Date.now()}`);
+			const o = await api.get<Order>(`/public/orders/${currentId}?qr_token=${encodeURIComponent(qrToken)}&_t=${Date.now()}`);
 			order = o;
 
 			// Reset proof state untuk pesanan aktif
@@ -357,7 +357,7 @@
 				gdriveFileId = result.fileId || null;
 				// Jika sebelumnya sudah terkirim, update otomatis ke kasir dengan URL GDrive
 				if (proofSubmitted) {
-					api.post<Order>(`/public/orders/${orderId}/proof`, {
+					api.post<Order>(`/public/orders/${orderId}/proof?qr_token=${encodeURIComponent(qrToken)}`, {
 						proof_url: gdriveFileUrl
 					}).catch((e) => console.warn('Auto-update proof URL error:', e));
 				}
@@ -388,7 +388,7 @@
 
 		isSubmittingProof = true;
 		try {
-			const updated = await api.post<Order>(`/public/orders/${orderId}/proof`, {
+			const updated = await api.post<Order>(`/public/orders/${orderId}/proof?qr_token=${encodeURIComponent(qrToken)}`, {
 				proof_url: targetUrl
 			});
 			if (updated) {

@@ -8,6 +8,17 @@ declare global {
 		// interface PageState {}
 		// interface Platform {}
 	}
+
+	interface ImportMetaEnv {
+		readonly VITE_API_URL?: string;
+		readonly VITE_WS_URL?: string;
+		readonly VITE_GDRIVE_UPLOAD_URL?: string;
+		readonly VITE_GDRIVE_DELETE_SECRET?: string;
+	}
+
+	interface ImportMeta {
+		readonly env: ImportMetaEnv;
+	}
 }
 
 export {};

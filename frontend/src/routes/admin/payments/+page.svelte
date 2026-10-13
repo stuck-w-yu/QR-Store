@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import { api, formatRupiah, getWebSocketURL } from '$lib/api/client';
+	import { api, formatRupiah, getWebSocketChannelURL } from '$lib/api/client';
 	import { auth } from '$lib/stores/auth.svelte';
 	import type { Order } from '$lib/types';
 	import { 
@@ -133,12 +133,12 @@
 		const restoId = auth.user?.restaurant_id || 'rst_nusantara';
 		const channel = `restaurant:${restoId}:cashier`;
 
-		const wsURL = getWebSocketURL();
+		const wsURL = getWebSocketChannelURL(channel);
 		try {
 			if (ws) {
 				try { ws.close(); } catch (_) {}
 			}
-			ws = new WebSocket(`${wsURL}?channel=${channel}`);
+			ws = new WebSocket(wsURL);
 
 			ws.onopen = () => {
 				wsConnected = true;

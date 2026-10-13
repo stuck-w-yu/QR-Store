@@ -28,6 +28,18 @@ export function getWebSocketURL(): string {
 	return 'ws://localhost:8080/ws';
 }
 
+// Builds a WebSocket URL for a channel, attaching the auth token when present
+// so the server can authorize the subscription.
+export function getWebSocketChannelURL(channel: string): string {
+	const base = getWebSocketURL();
+	const params = new URLSearchParams({ channel });
+	const token = api.getToken();
+	if (token) {
+		params.set('token', token);
+	}
+	return `${base}?${params.toString()}`;
+}
+
 class APIClient {
 	private token: string | null = null;
 

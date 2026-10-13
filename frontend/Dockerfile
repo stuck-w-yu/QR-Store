@@ -11,10 +11,12 @@ WORKDIR /app
 ARG VITE_API_URL
 ARG VITE_WS_URL
 ARG VITE_GDRIVE_UPLOAD_URL
+ARG VITE_GDRIVE_DELETE_SECRET
 
 ENV VITE_API_URL=${VITE_API_URL}
 ENV VITE_WS_URL=${VITE_WS_URL}
 ENV VITE_GDRIVE_UPLOAD_URL=${VITE_GDRIVE_UPLOAD_URL}
+ENV VITE_GDRIVE_DELETE_SECRET=${VITE_GDRIVE_DELETE_SECRET}
 
 COPY package*.json ./
 RUN npm ci
@@ -34,6 +36,7 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV HOST=0.0.0.0
 ENV PORT=3000
+ENV TZ=UTC
 
 COPY --from=builder --chown=node:node /app/package*.json ./
 COPY --from=builder --chown=node:node /app/node_modules ./node_modules

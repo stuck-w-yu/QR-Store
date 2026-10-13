@@ -62,7 +62,7 @@
 				const savedOrderId = localStorage.getItem(`active_order_${token}`);
 				if (savedOrderId) {
 					try {
-						const orderData = await api.get<any>(`/public/orders/${savedOrderId}`);
+						const orderData = await api.get<any>(`/public/orders/${savedOrderId}?qr_token=${encodeURIComponent(token)}`);
 						if (orderData && ['WAITING_PAYMENT', 'CONFIRMED', 'PREPARING', 'READY'].includes(orderData.status)) {
 							existingActiveOrder = {
 								id: orderData.id,
