@@ -26,13 +26,14 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    env_file:
+      - .env
     environment:
-      APP_ENV: production
+      APP_ENV: ${APP_ENV:-production}
       APP_PORT: 8080
-      DATABASE_URL: postgres://postgres:postgrespassword@postgres:5432/qr_store?sslmode=disable
-      JWT_SECRET: production-secret-jwt-key-change-this-in-env-file-999
-      PAYMENT_PROVIDER: mock
-      CORS_ORIGINS: "*"
+      TZ: UTC
+      DATABASE_URL: ${DATABASE_URL:-postgres://postgres:postgrespassword@postgres:5432/qr_store?sslmode=disable}
+      # JWT_SECRET, PAYMENT_*, CORS_ORIGINS supplied via .env (see .env.example)
     ports:
       - "8080:8080"
 

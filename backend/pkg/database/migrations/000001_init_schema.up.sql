@@ -6,11 +6,13 @@ CREATE TABLE IF NOT EXISTS restaurants (
     name VARCHAR(255) NOT NULL,
     slug VARCHAR(255) UNIQUE NOT NULL,
     logo_url TEXT,
+    qris_image_url TEXT,
     address TEXT,
     phone VARCHAR(50),
     tax_percent NUMERIC(5,2) DEFAULT 10.00 NOT NULL,
     service_percent NUMERIC(5,2) DEFAULT 0.00 NOT NULL,
     status VARCHAR(50) DEFAULT 'ACTIVE' NOT NULL,
+    plan VARCHAR(50) DEFAULT 'PRO' NOT NULL,
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
     updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
@@ -97,14 +99,19 @@ CREATE TABLE IF NOT EXISTS orders (
     table_session_id VARCHAR(64),
     order_number VARCHAR(100) UNIQUE NOT NULL,
     status VARCHAR(50) DEFAULT 'WAITING_PAYMENT' NOT NULL,
+    payment_status VARCHAR(50) DEFAULT 'UNPAID' NOT NULL,
+    payment_method VARCHAR(50),
     subtotal BIGINT NOT NULL,
     tax BIGINT NOT NULL,
     service_charge BIGINT NOT NULL,
     discount BIGINT DEFAULT 0 NOT NULL,
     total BIGINT NOT NULL,
     notes TEXT,
+    proof_url TEXT,
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    completed_at TIMESTAMPTZ,
+    cancelled_at TIMESTAMPTZ
 );
 
 CREATE TABLE IF NOT EXISTS order_items (
@@ -128,13 +135,31 @@ CREATE TABLE IF NOT EXISTS payments (
     provider_transaction_id VARCHAR(255),
     payment_method VARCHAR(50),
     amount BIGINT NOT NULL,
+    paid_amount BIGINT DEFAULT 0 NOT NULL,
+    change_amount BIGINT DEFAULT 0 NOT NULL,
+    reference_number VARCHAR(100),
     status VARCHAR(50) DEFAULT 'PENDING' NOT NULL,
     payment_url TEXT,
     qr_string TEXT,
+    verified_by VARCHAR(64) REFERENCES users(id) ON DELETE SET NULL,
+    verified_at TIMESTAMPTZ,
     expired_at TIMESTAMPTZ,
     paid_at TIMESTAMPTZ,
+    proof_url TEXT,
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
     updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS service_requests (
+    id VARCHAR(64) PRIMARY KEY,
+    restaurant_id VARCHAR(64) REFERENCES restaurants(id) ON DELETE CASCADE NOT NULL,
+    table_id VARCHAR(64) REFERENCES tables(id) ON DELETE CASCADE NOT NULL,
+    type VARCHAR(50) NOT NULL, -- CALL_WAITER, BILL, RECEIPT, HELP
+    status VARCHAR(50) DEFAULT 'PENDING' NOT NULL, -- PENDING, IN_PROGRESS, RESOLVED, CANCELLED
+    notes TEXT,
+    resolved_by VARCHAR(64) REFERENCES users(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    resolved_at TIMESTAMPTZ
 );
 
 CREATE TABLE IF NOT EXISTS payment_webhook_events (
@@ -183,3 +208,85 @@ CREATE INDEX IF NOT EXISTS idx_tables_restaurant_id ON tables(restaurant_id);
 CREATE INDEX IF NOT EXISTS idx_tables_qr_token ON tables(qr_token);
 CREATE INDEX IF NOT EXISTS idx_users_restaurant_id ON users(restaurant_id);
 CREATE INDEX IF NOT EXISTS idx_categories_restaurant_id ON categories(restaurant_id);
+
+-- Cashier Shift Management Schema
+CREATE TABLE IF NOT EXISTS registers (
+    id VARCHAR(64) PRIMARY KEY,
+    restaurant_id VARCHAR(64) REFERENCES restaurants(id) ON DELETE CASCADE NOT NULL,
+    outlet_id VARCHAR(64),
+    name VARCHAR(100) NOT NULL,
+    status VARCHAR(20) DEFAULT 'ACTIVE' NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS cashier_shifts (
+    id VARCHAR(64) PRIMARY KEY,
+    restaurant_id VARCHAR(64) REFERENCES restaurants(id) ON DELETE CASCADE NOT NULL,
+    outlet_id VARCHAR(64),
+    register_id VARCHAR(64) REFERENCES registers(id) ON DELETE RESTRICT NOT NULL,
+    cashier_id VARCHAR(64) REFERENCES users(id) ON DELETE RESTRICT NOT NULL,
+    status VARCHAR(20) NOT NULL, -- OPEN, CLOSING, CLOSED, CANCELLED
+    opening_balance BIGINT DEFAULT 0 NOT NULL,
+    opened_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    closed_at TIMESTAMPTZ,
+    expected_total BIGINT DEFAULT 0 NOT NULL,
+    actual_total BIGINT,
+    difference BIGINT,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uk_active_register_shift ON cashier_shifts (register_id) WHERE status = 'OPEN';
+CREATE UNIQUE INDEX IF NOT EXISTS uk_active_cashier_shift ON cashier_shifts (cashier_id) WHERE status = 'OPEN';
+
+CREATE TABLE IF NOT EXISTS cashier_shift_transactions (
+    id VARCHAR(64) PRIMARY KEY,
+    shift_id VARCHAR(64) REFERENCES cashier_shifts(id) ON DELETE CASCADE NOT NULL,
+    order_id VARCHAR(64) REFERENCES orders(id) ON DELETE SET NULL,
+    payment_id VARCHAR(64) REFERENCES payments(id) ON DELETE SET NULL,
+    type VARCHAR(30) NOT NULL, -- SALE, REFUND, VOID, ADJUSTMENT
+    amount BIGINT NOT NULL,
+    metadata JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS shift_closings (
+    id VARCHAR(64) PRIMARY KEY,
+    shift_id VARCHAR(64) UNIQUE REFERENCES cashier_shifts(id) ON DELETE CASCADE NOT NULL,
+    gross_sales BIGINT DEFAULT 0 NOT NULL,
+    refund_total BIGINT DEFAULT 0 NOT NULL,
+    void_total BIGINT DEFAULT 0 NOT NULL,
+    adjustment_total BIGINT DEFAULT 0 NOT NULL,
+    net_sales BIGINT DEFAULT 0 NOT NULL,
+    expected_amount BIGINT DEFAULT 0 NOT NULL,
+    actual_amount BIGINT,
+    difference BIGINT,
+    notes TEXT,
+    closed_by VARCHAR(64) REFERENCES users(id) NOT NULL,
+    closed_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS refunds (
+    id VARCHAR(64) PRIMARY KEY,
+    restaurant_id VARCHAR(64) REFERENCES restaurants(id) ON DELETE CASCADE NOT NULL,
+    order_id VARCHAR(64) REFERENCES orders(id) ON DELETE CASCADE NOT NULL,
+    payment_id VARCHAR(64) REFERENCES payments(id) ON DELETE CASCADE NOT NULL,
+    amount BIGINT NOT NULL,
+    reason TEXT NOT NULL,
+    status VARCHAR(30) DEFAULT 'COMPLETED' NOT NULL, -- PENDING, COMPLETED, REJECTED
+    requested_by VARCHAR(64) REFERENCES users(id) NOT NULL,
+    approved_by VARCHAR(64) REFERENCES users(id),
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    completed_at TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_registers_restaurant ON registers(restaurant_id);
+CREATE INDEX IF NOT EXISTS idx_cashier_shifts_restaurant ON cashier_shifts(restaurant_id);
+CREATE INDEX IF NOT EXISTS idx_cashier_shifts_cashier ON cashier_shifts(cashier_id);
+CREATE INDEX IF NOT EXISTS idx_cashier_shifts_status ON cashier_shifts(status);
+CREATE INDEX IF NOT EXISTS idx_shift_transactions_shift ON cashier_shift_transactions(shift_id);
+CREATE INDEX IF NOT EXISTS idx_shift_transactions_created ON cashier_shift_transactions(created_at);
+CREATE INDEX IF NOT EXISTS idx_refunds_order_id ON refunds(order_id);
+CREATE INDEX IF NOT EXISTS idx_refunds_restaurant_id ON refunds(restaurant_id);
+

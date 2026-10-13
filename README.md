@@ -5,7 +5,7 @@ Sistem pemesanan restoran dan kasir mandiri berbasis QR Code sesuai spesifikasi 
 ## 🚀 Arsitektur & Teknologi
 
 - **Backend**: Golang (Gin), Modular Monolith
-- **Database**: PostgreSQL dengan skema multi-tenant & migrasi SQL
+- **Database**: PostgreSQL dengan skema multi-tenant & migrasi SQL bernomor (single source of truth, di-embed ke binary)
 - **Realtime**: WebSockets (channel pub/sub untuk notifikasi instan dapur & pelanggan)
 - **Payment Gateway**: Abstraksi Gateway (Midtrans + Mock Gateway dengan proteksi idempotency webhook)
 - **Frontend**: SvelteKit 5 + TypeScript + Tailwind CSS (lucide-svelte, runes mode)
@@ -78,3 +78,33 @@ Pengujian mencakup:
 - Validasi *State Machine* pesanan (mencegah lompatan status ilegal).
 - Validasi *Signature* SHA-512 Payment Gateway (Midtrans).
 - Verifikasi simulasi pembayaran Mock Gateway.
+
+---
+
+## ☁️ Deployment
+
+### Docker / VPS (Direkomendasikan untuk produksi)
+
+Cara paling mudah: `docker compose up --build` di VPS. Semua layanan (PostgreSQL, backend, frontend, Caddy) berjalan dalam satu jaringan, WebSocket realtime aktif penuh.
+
+### Vercel (⚠️ keterbatasan realtime)
+
+`vercel.json` memetakan `/api`, `/health`, dan `/ws` ke service `backend`. Namun **Vercel Serverless Functions tidak mendukung koneksi WebSocket persisten** — fungsi dibatasi durasi eksekusinya. Konsekuensinya di Vercel:
+
+- Notifikasi realtime (dapur/pelanggan) **tidak akan bertahan**; client akan terus mencoba reconnect lalu menyerah.
+- REST API tetap berfungsi normal.
+- Untuk realtime, arahkan `VITE_WS_URL` ke backend yang di-host di VPS/Docker (mis. `wss://api.contoh.com/ws`), atau gunakan platform yang mendukung WebSocket (Fly.io, Railway, Render, VPS).
+
+Jika realtime tidak diperlukan, frontend sudah aman: kegagalan koneksi WS tidak memblokir alur pemesanan (data tetap bisa diambil ulang via REST).
+
+### Environment Penting
+
+| Variabel | Wajib | Catatan |
+|---|---|---|
+| `JWT_SECRET` | ✅ | Minimal 32 karakter. App **gagal start** di produksi bila tidak aman. |
+| `PAYMENT_WEBHOOK_SECRET` | ✅ | Dipakai HMAC-SHA256 untuk memverifikasi webhook. |
+| `DATABASE_URL` | ✅ | Koneksi PostgreSQL; backend retry dengan backoff saat DB belum siap. |
+| `CORS_ORIGINS` | ✅ | Daftar origin dipisah koma. Wildcard + credentials dilarang di produksi. |
+| `SEED_DEMO_DATA` | — | Default `false`. Jangan aktifkan di produksi. |
+| `VITE_WS_URL` | — | URL WebSocket absolut untuk realtime lintas-domain. |
+| `BUCKET_DELETE_SECRET` (GAS) | ✅ | Script Property di Google Apps Script untuk otorisasi hapus file. |

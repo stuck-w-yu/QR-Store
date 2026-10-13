@@ -1,5 +1,11 @@
 -- 000001_init_schema.down.sql
 
+DROP TABLE IF EXISTS refunds CASCADE;
+DROP TABLE IF EXISTS shift_closings CASCADE;
+DROP TABLE IF EXISTS cashier_shift_transactions CASCADE;
+DROP TABLE IF EXISTS cashier_shifts CASCADE;
+DROP TABLE IF EXISTS registers CASCADE;
+DROP TABLE IF EXISTS service_requests CASCADE;
 DROP TABLE IF EXISTS audit_logs CASCADE;
 DROP TABLE IF EXISTS order_status_history CASCADE;
 DROP TABLE IF EXISTS payment_webhook_events CASCADE;

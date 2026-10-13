@@ -3,7 +3,7 @@
 # =========================================================
 # Stage 1: Build Backend (Golang)
 # =========================================================
-FROM golang:1.27-alpine AS backend-builder
+FROM golang:1.26-alpine AS backend-builder
 
 WORKDIR /app
 
@@ -26,10 +26,12 @@ WORKDIR /app
 ARG VITE_API_URL
 ARG VITE_WS_URL
 ARG VITE_GDRIVE_UPLOAD_URL
+ARG VITE_GDRIVE_DELETE_SECRET
 
 ENV VITE_API_URL=${VITE_API_URL}
 ENV VITE_WS_URL=${VITE_WS_URL}
 ENV VITE_GDRIVE_UPLOAD_URL=${VITE_GDRIVE_UPLOAD_URL}
+ENV VITE_GDRIVE_DELETE_SECRET=${VITE_GDRIVE_DELETE_SECRET}
 
 COPY frontend/package*.json ./
 RUN npm ci
@@ -51,10 +53,9 @@ RUN apk add --no-cache ca-certificates tzdata
 # Copy Caddy binary from official Caddy image
 COPY --from=caddy:2-alpine /usr/bin/caddy /usr/bin/caddy
 
-# Set up Backend binaries and migrations
+# Set up Backend binary (migrations are embedded in the binary)
 WORKDIR /app/backend
 COPY --from=backend-builder /app/server ./server
-COPY --from=backend-builder /app/migrations ./migrations
 
 # Set up Frontend application
 WORKDIR /app/frontend
@@ -72,6 +73,7 @@ RUN chmod +x /app/start.sh
 # Default environment configurations
 ENV NODE_ENV=production
 ENV APP_ENV=production
+ENV TZ=UTC
 ENV PORT=80
 
 # Expose Caddy public HTTP port

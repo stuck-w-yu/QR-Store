@@ -1,0 +1,299 @@
+openapi: 3.1.0
+info:
+  title: QR-Store API
+  version: 1.0.0
+  description: |
+    REST API untuk sistem self-order restoran & kasir QR-Store.
+
+    Semua respons sukses memakai envelope `{ "success": true, "data": ..., "message": ... }`.
+    Semua error memakai `{ "success": false, "error": { "code": "...", "message": "..." } }`
+    (lihat docs/API_ERRORS.md).
+
+    Autentikasi: header `Authorization: Bearer <jwt>` untuk endpoint non-publik.
+servers:
+  - url: /api/v1
+
+tags:
+  - name: auth
+  - name: public
+  - name: orders
+  - name: payment
+  - name: cashier
+  - name: menu
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    APIError:
+      type: object
+      required: [success, error]
+      properties:
+        success:
+          type: boolean
+          enum: [false]
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              example: ORDER_NOT_FOUND
+            message:
+              type: string
+              example: Order not found
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 8
+
+    LoginResponse:
+      type: object
+      properties:
+        token:
+          type: string
+        user:
+          $ref: '#/components/schemas/User'
+
+    User:
+      type: object
+      properties:
+        id: { type: string }
+        restaurant_id: { type: string }
+        name: { type: string }
+        email: { type: string, format: email }
+        role:
+          type: string
+          enum: [SUPERADMIN, OWNER, ADMIN, CASHIER, KITCHEN]
+
+    OrderItemRequest:
+      type: object
+      required: [menu_id, quantity]
+      properties:
+        menu_id: { type: string }
+        quantity: { type: integer, minimum: 1 }
+        option_ids:
+          type: array
+          items: { type: string }
+        notes: { type: string }
+
+    CreateOrderRequest:
+      type: object
+      required: [qr_token, items]
+      properties:
+        qr_token: { type: string }
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/OrderItemRequest' }
+        notes: { type: string }
+
+    Order:
+      type: object
+      properties:
+        id: { type: string }
+        restaurant_id: { type: string }
+        order_number: { type: string }
+        status:
+          type: string
+          enum: [WAITING_PAYMENT, CONFIRMED, PREPARING, READY, COMPLETED, CANCELLED]
+        payment_status:
+          type: string
+          enum: [UNPAID, PAID, REFUNDED]
+        total: { type: integer, format: int64 }
+        created_at: { type: string, format: date-time }
+
+paths:
+  /auth/login:
+    post:
+      tags: [auth]
+      summary: Login dan dapatkan JWT
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LoginResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /auth/me:
+    get:
+      tags: [auth]
+      summary: Info user yang sedang login
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /public/tables/{qr_token}:
+    get:
+      tags: [public]
+      summary: Info meja & restoran dari QR token
+      security: []
+      parameters:
+        - name: qr_token
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /public/orders:
+    post:
+      tags: [public]
+      summary: Buat pesanan (self-order dari meja)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateOrderRequest' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Order' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /orders:
+    get:
+      tags: [orders]
+      summary: Daftar pesanan restoran (dengan pagination)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 50, maximum: 200 }
+        - name: offset
+          in: query
+          schema: { type: integer, default: 0, minimum: 0 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Order' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /payments/webhook:
+    post:
+      tags: [payment]
+      summary: Webhook dari payment gateway (HMAC + anti-replay)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200': { description: Diproses / duplikat diabaikan (idempotent) }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /registers:
+    get:
+      tags: [cashier]
+      summary: Daftar register/kasir
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: OK }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /registers/{id}:
+    get:
+      tags: [cashier]
+      summary: Detail register (scoped ke tenant JWT)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /public/restaurants/{restaurant_id}/menu:
+    get:
+      tags: [menu, public]
+      summary: Menu publik sebuah restoran
+      security: []
+      parameters:
+        - name: restaurant_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+
+  /health:
+    get:
+      summary: Health check (ping DB nyata)
+      security: []
+      responses:
+        '200': { description: Sehat }
+        '503': { description: DB tidak dapat dihubungi }
+
+  responses:
+    BadRequest:
+      description: Request tidak valid
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/APIError' }
+    Unauthorized:
+      description: Tidak terautentikasi
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/APIError' }
+    NotFound:
+      description: Resource tidak ditemukan
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/APIError' }
+    Conflict:
+      description: Konflik state
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/APIError' }
+    TooManyRequests:
+      description: Rate limit terlampaui
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/APIError' }
+    InternalServerError:
+      description: Kesalahan server
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/APIError' }

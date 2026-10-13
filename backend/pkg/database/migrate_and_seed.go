@@ -2,7 +2,8 @@ package database
 
 import (
 	"context"
-	_ "embed"
+	"crypto/rand"
+	"encoding/base64"
 	"fmt"
 	"time"
 
@@ -10,56 +11,54 @@ import (
 	"qr-store/backend/pkg/logger"
 )
 
-//go:embed schema.sql
-var schemaSQL string
+// generateRandomPassword returns a URL-safe random password (24 bytes).
+func generateRandomPassword() string {
+	buf := make([]byte, 24)
+	if _, err := rand.Read(buf); err != nil {
+		// Extremely unlikely; fall back to a long fixed-ish value to avoid an
+		// empty/weak password.
+		return "CHANGE_ME_" + fmt.Sprint(time.Now().UnixNano())
+	}
+	return base64.RawURLEncoding.EncodeToString(buf)
+}
 
-func RunMigrationsAndSeed(ctx context.Context, db *DB) error {
-	logger.Log.Info("running database migrations...")
-	if _, err := db.Pool.Exec(ctx, schemaSQL); err != nil {
-		return fmt.Errorf("failed to run migrations: %w", err)
+// RunMigrationsAndSeed applies all pending migrations (single source of truth:
+// pkg/database/migrations/*.up.sql) and, when seedDemo is true, seeds
+// demonstration data. It never runs ad-hoc DDL: schemas are managed exclusively
+// by numbered migrations.
+func RunMigrationsAndSeed(ctx context.Context, db *DB, seedDemo bool) error {
+	if err := RunMigrations(ctx, db.Pool); err != nil {
+		return fmt.Errorf("migrations failed: %w", err)
 	}
 
-	// Ensure new schema columns exist
-	_, _ = db.Pool.Exec(ctx, "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS plan VARCHAR(50) DEFAULT 'PRO'")
-	_, _ = db.Pool.Exec(ctx, "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS qris_image_url TEXT")
-	_, _ = db.Pool.Exec(ctx, "ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_status VARCHAR(50) DEFAULT 'UNPAID' NOT NULL")
-	_, _ = db.Pool.Exec(ctx, "ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_method VARCHAR(50)")
-	_, _ = db.Pool.Exec(ctx, "ALTER TABLE orders ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ")
-	_, _ = db.Pool.Exec(ctx, "ALTER TABLE orders ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMPTZ")
-	_, _ = db.Pool.Exec(ctx, "ALTER TABLE orders ADD COLUMN IF NOT EXISTS proof_url TEXT")
-	_, _ = db.Pool.Exec(ctx, "ALTER TABLE payments ADD COLUMN IF NOT EXISTS proof_url TEXT")
-	_, _ = db.Pool.Exec(ctx, "ALTER TABLE payments ADD COLUMN IF NOT EXISTS paid_amount BIGINT DEFAULT 0 NOT NULL")
-	_, _ = db.Pool.Exec(ctx, "ALTER TABLE payments ADD COLUMN IF NOT EXISTS change_amount BIGINT DEFAULT 0 NOT NULL")
-	_, _ = db.Pool.Exec(ctx, "ALTER TABLE payments ADD COLUMN IF NOT EXISTS reference_number VARCHAR(100)")
-	_, _ = db.Pool.Exec(ctx, "ALTER TABLE payments ADD COLUMN IF NOT EXISTS verified_by VARCHAR(64) REFERENCES users(id) ON DELETE SET NULL")
-	_, _ = db.Pool.Exec(ctx, "ALTER TABLE payments ADD COLUMN IF NOT EXISTS verified_at TIMESTAMPTZ")
-	_, _ = db.Pool.Exec(ctx, `
-		CREATE TABLE IF NOT EXISTS service_requests (
-			id VARCHAR(64) PRIMARY KEY,
-			restaurant_id VARCHAR(64) REFERENCES restaurants(id) ON DELETE CASCADE NOT NULL,
-			table_id VARCHAR(64) REFERENCES tables(id) ON DELETE CASCADE NOT NULL,
-			type VARCHAR(50) NOT NULL,
-			status VARCHAR(50) DEFAULT 'PENDING' NOT NULL,
-			notes TEXT,
-			resolved_by VARCHAR(64) REFERENCES users(id) ON DELETE SET NULL,
-			created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
-			resolved_at TIMESTAMPTZ
-		);
-		CREATE INDEX IF NOT EXISTS idx_service_requests_resto ON service_requests(restaurant_id);
-		CREATE INDEX IF NOT EXISTS idx_service_requests_status ON service_requests(status);
-	`)
-
-	// Ensure Superadmin user exists
+	// Ensure Superadmin user exists. In production we NEVER seed a known
+	// default password: if no superadmin exists we generate a random one and
+	// log it once so the operator can rotate it immediately.
 	var superadminCount int
 	_ = db.Pool.QueryRow(ctx, "SELECT COUNT(*) FROM users WHERE role = 'SUPERADMIN'").Scan(&superadminCount)
 	if superadminCount == 0 {
-		hash, _ := bcrypt.GenerateFromPassword([]byte("password123"), bcrypt.DefaultCost)
+		password := "password123"
+		if !seedDemo {
+			password = generateRandomPassword()
+		}
+		hash, _ := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 		_, _ = db.Pool.Exec(ctx, `
 			INSERT INTO users (id, restaurant_id, name, email, password_hash, role, status, created_at, updated_at)
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 			ON CONFLICT (email) DO NOTHING
 		`, "usr_superadmin", "rst_nusantara", "Super Administrator", "superadmin@qrstore.id", string(hash), "SUPERADMIN", "ACTIVE", time.Now(), time.Now())
-		logger.Log.Info("seeded default superadmin user (superadmin@qrstore.id)")
+		if seedDemo {
+			logger.Log.Info("seeded default superadmin user (superadmin@qrstore.id / password123) - DEVELOPMENT ONLY")
+		} else {
+			logger.Log.Warn("seeded superadmin user with a random password; rotate it immediately",
+				"email", "superadmin@qrstore.id", "temporary_password", password)
+		}
+	}
+
+	// Demo business data is opt-in only.
+	if !seedDemo {
+		logger.Log.Info("demo seeding disabled (set SEED_DEMO_DATA=true to enable)")
+		return nil
 	}
 
 	// Check if seeded

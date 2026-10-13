@@ -23,6 +23,7 @@ import (
 	"qr-store/backend/internal/user"
 	"qr-store/backend/pkg/database"
 	"qr-store/backend/pkg/logger"
+	"qr-store/backend/pkg/ratelimit"
 	"qr-store/backend/pkg/response"
 	"qr-store/backend/pkg/websocket"
 )
@@ -31,12 +32,22 @@ func main() {
 	cfg := configs.LoadConfig()
 	logger.Init(cfg.AppEnv)
 
+	// Enforce security configuration before doing anything else.
+	warnings, fatal := cfg.ValidateForEnv()
+	if fatal != nil {
+		logger.Log.Error("refusing to start due to insecure configuration", "error", fatal)
+		os.Exit(1)
+	}
+	for _, w := range warnings {
+		logger.Log.Warn("insecure configuration (non-fatal in dev)", "warning", w)
+	}
+
 	gin.SetMode(gin.ReleaseMode)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
-	// Connect PostgreSQL
+	// Connect PostgreSQL (with retry/backoff while the DB comes up)
 	db, err := database.NewPostgresPool(ctx, cfg.DatabaseURL)
 	if err != nil {
 		logger.Log.Error("database connection failed", "error", err)
@@ -46,12 +57,16 @@ func main() {
 	logger.Log.Info("connected to PostgreSQL successfully")
 
 	// Run migrations & seed demo restaurant
-	if err := database.RunMigrationsAndSeed(context.Background(), db); err != nil {
+	if err := database.RunMigrationsAndSeed(context.Background(), db, cfg.SeedDemoData); err != nil {
 		logger.Log.Error("migration/seed failed", "error", err)
+		if cfg.IsProduction() {
+			logger.Log.Error("aborting start: database schema could not be prepared in production")
+			os.Exit(1)
+		}
 	}
 
 	// WebSocket Hub
-	hub := websocket.NewHub()
+	hub := websocket.NewHub(corsAllowlist(cfg.CORSOrigins))
 	go hub.Run()
 
 	// Repositories
@@ -66,9 +81,9 @@ func main() {
 	// Payment Gateway Selection
 	var gw payment.PaymentGateway
 	if cfg.PaymentProvider == "midtrans" {
-		gw = payment.NewMidtransGateway(cfg.PaymentSecret, cfg.AppEnv != "production")
+		gw = payment.NewMidtransGateway(cfg.PaymentSecret, cfg.PaymentWebhookSecret, cfg.AppEnv != "production")
 	} else {
-		gw = payment.NewMockGateway()
+		gw = payment.NewMockGateway(cfg.PaymentWebhookSecret)
 	}
 
 	// Services
@@ -78,6 +93,15 @@ func main() {
 	paymentService := payment.NewService(paymentRepo, orderRepo, gw, hub)
 	cashierService := cashier.NewService(cashierRepo, orderRepo, paymentRepo, hub)
 	paymentService.SetSaleHook(cashierService)
+
+	// Authorize WebSocket channel subscriptions using JWT claims.
+	hub.SetAuthenticator(func(token string) (string, string, error) {
+		claims, err := authService.ValidateToken(token)
+		if err != nil {
+			return "", "", err
+		}
+		return claims.RestaurantID, string(claims.Role), nil
+	})
 
 	// Handlers
 	authHandler := auth.NewHandler(authService)
@@ -114,34 +138,29 @@ func main() {
 	})
 
 	// CORS Middleware
-	corsOrigins := strings.Split(cfg.CORSOrigins, ",")
-	for i := range corsOrigins {
-		corsOrigins[i] = strings.TrimSpace(corsOrigins[i])
-	}
+	corsOrigins := corsAllowlist(cfg.CORSOrigins)
+	allowAllOrigins := containsString(corsOrigins, "*")
 
 	r.Use(func(c *gin.Context) {
 		reqOrigin := c.GetHeader("Origin")
 		allowedOrigin := ""
 
-		if cfg.CORSOrigins == "*" {
-			if reqOrigin != "" {
+		if reqOrigin != "" {
+			if allowAllOrigins && !cfg.IsProduction() {
+				// Dev convenience: reflect origin, but never pair wildcard with credentials in production.
 				allowedOrigin = reqOrigin
-			} else {
-				allowedOrigin = "*"
+			} else if matchesOrigin(corsOrigins, reqOrigin) {
+				allowedOrigin = reqOrigin
 			}
-		} else {
-			cleanReq := strings.TrimSuffix(reqOrigin, "/")
-			for _, o := range corsOrigins {
-				if o == "*" || strings.TrimSuffix(o, "/") == cleanReq {
-					allowedOrigin = reqOrigin
-					break
-				}
-			}
+		} else if allowAllOrigins {
+			allowedOrigin = "*"
 		}
 
 		if allowedOrigin != "" {
 			c.Writer.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
-			c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+			if allowedOrigin != "*" {
+				c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+			}
 			c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With, X-Mock-Signature")
 			c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, PATCH, DELETE")
 			c.Writer.Header().Set("Vary", "Origin")
@@ -154,8 +173,21 @@ func main() {
 		c.Next()
 	})
 
-	// Health Check
+	// Rate limiters for sensitive/public endpoints (per client IP).
+	loginLimiter := ratelimit.New(5.0/60.0, 5)     // 5 login attempts per minute, burst 5
+	webhookLimiter := ratelimit.New(30.0/60.0, 30) // 30 webhook calls per minute
+	publicLimiter := ratelimit.New(1.0, 30)        // 1 rps public order/proof, burst 30
+	r.Use(ratelimitSelector(loginLimiter, webhookLimiter, publicLimiter))
+
+	// Health Check (performs a real database ping)
 	r.GET("/health", func(c *gin.Context) {
+		pingCtx, cancel := context.WithTimeout(c.Request.Context(), 3*time.Second)
+		defer cancel()
+		if err := db.Pool.Ping(pingCtx); err != nil {
+			logger.Log.Error("health check: database ping failed", "error", err)
+			response.Error(c, http.StatusServiceUnavailable, "SERVICE_UNAVAILABLE", "Database unavailable")
+			return
+		}
 		response.OK(c, gin.H{
 			"status":   "ok",
 			"database": "connected",
@@ -205,4 +237,52 @@ func main() {
 		logger.Log.Error("server forced to shutdown", "error", err)
 	}
 	logger.Log.Info("server exited cleanly")
+}
+
+func corsAllowlist(raw string) []string {
+	parts := strings.Split(raw, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(p), "/"))
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+func containsString(list []string, target string) bool {
+	for _, v := range list {
+		if v == target {
+			return true
+		}
+	}
+	return false
+}
+
+func matchesOrigin(allowlist []string, origin string) bool {
+	clean := strings.TrimSuffix(origin, "/")
+	for _, o := range allowlist {
+		if o == clean {
+			return true
+		}
+	}
+	return false
+}
+
+// ratelimitSelector applies the matching limiter based on the request path.
+func ratelimitSelector(login, webhook, public *ratelimit.Limiter) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		p := c.Request.URL.Path
+		switch {
+		case p == "/api/v1/auth/login":
+			login.Middleware()(c)
+		case p == "/api/v1/payments/webhook":
+			webhook.Middleware()(c)
+		case strings.HasPrefix(p, "/api/v1/public/"):
+			public.Middleware()(c)
+		default:
+			c.Next()
+		}
+	}
 }

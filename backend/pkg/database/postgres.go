@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"qr-store/backend/pkg/logger"
 )
 
 type DB struct {
@@ -28,14 +29,44 @@ func NewPostgresPool(ctx context.Context, connString string) (*DB, error) {
 		return nil, fmt.Errorf("unable to create connection pool: %w", err)
 	}
 
-	pingCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
-	defer cancel()
+	// Retry with exponential backoff: the database may still be starting up,
+	// especially under Docker Compose / Kubernetes where the app can boot
+	// before PostgreSQL accepts connections.
+	const (
+		maxAttempts = 10
+		baseDelay   = 500 * time.Millisecond
+		maxDelay    = 10 * time.Second
+	)
+	delay := baseDelay
+	var lastErr error
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		pingCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		lastErr = pool.Ping(pingCtx)
+		cancel()
+		if lastErr == nil {
+			return &DB{Pool: pool}, nil
+		}
 
-	if err := pool.Ping(pingCtx); err != nil {
-		return nil, fmt.Errorf("unable to ping database: %w", err)
+		logger.Log.Warn("database ping failed, retrying",
+			"attempt", attempt, "max_attempts", maxAttempts, "delay", delay, "error", lastErr)
+
+		if attempt == maxAttempts {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			pool.Close()
+			return nil, fmt.Errorf("context cancelled while waiting for database: %w", ctx.Err())
+		case <-time.After(delay):
+		}
+		delay *= 2
+		if delay > maxDelay {
+			delay = maxDelay
+		}
 	}
 
-	return &DB{Pool: pool}, nil
+	pool.Close()
+	return nil, fmt.Errorf("unable to ping database after %d attempts: %w", maxAttempts, lastErr)
 }
 
 func (db *DB) Close() {

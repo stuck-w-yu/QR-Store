@@ -13,18 +13,16 @@ import (
 )
 
 type Handler struct {
-	service        Service
-	authService    auth.Service
-	orderService   order.Service
-	paymentService payment.Service
+	service     Service
+	authService auth.Service
+	orderFacade *OrderFacade
 }
 
 func NewHandler(service Service, authService auth.Service, orderService order.Service, paymentService payment.Service) *Handler {
 	return &Handler{
-		service:        service,
-		authService:    authService,
-		orderService:   orderService,
-		paymentService: paymentService,
+		service:     service,
+		authService: authService,
+		orderFacade: NewOrderFacade(orderService, paymentService),
 	}
 }
 
@@ -86,7 +84,7 @@ func (h *Handler) ListRegisters(c *gin.Context) {
 	restoID, _ := c.Get(auth.CtxRestaurantID)
 	list, err := h.service.ListRegisters(c.Request.Context(), restoID.(string))
 	if err != nil {
-		response.InternalServerError(c, "DB_ERROR", err.Error())
+		response.ServerError(c, "DB_ERROR", err)
 		return
 	}
 	response.OK(c, list, "Registers retrieved successfully")
@@ -94,13 +92,14 @@ func (h *Handler) ListRegisters(c *gin.Context) {
 
 func (h *Handler) GetRegister(c *gin.Context) {
 	id := c.Param("id")
-	reg, err := h.service.GetRegister(c.Request.Context(), id)
+	restoID, _ := c.Get(auth.CtxRestaurantID)
+	reg, err := h.service.GetRegister(c.Request.Context(), id, restoID.(string))
 	if err != nil {
 		if errors.Is(err, ErrRegisterNotFound) {
 			response.NotFound(c, "REGISTER_NOT_FOUND", "Register not found")
 			return
 		}
-		response.InternalServerError(c, "DB_ERROR", err.Error())
+		response.ServerError(c, "DB_ERROR", err)
 		return
 	}
 	response.OK(c, reg, "Register retrieved successfully")
@@ -116,7 +115,7 @@ func (h *Handler) CreateRegister(c *gin.Context) {
 
 	reg, err := h.service.CreateRegister(c.Request.Context(), restoID.(string), req)
 	if err != nil {
-		response.InternalServerError(c, "CREATE_REGISTER_FAILED", err.Error())
+		response.ServerError(c, "CREATE_REGISTER_FAILED", err)
 		return
 	}
 	response.Created(c, reg, "Register created successfully")
@@ -124,19 +123,20 @@ func (h *Handler) CreateRegister(c *gin.Context) {
 
 func (h *Handler) UpdateRegister(c *gin.Context) {
 	id := c.Param("id")
+	restoID, _ := c.Get(auth.CtxRestaurantID)
 	var req UpdateRegisterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, "INVALID_REQUEST", err.Error())
 		return
 	}
 
-	reg, err := h.service.UpdateRegister(c.Request.Context(), id, req)
+	reg, err := h.service.UpdateRegister(c.Request.Context(), id, restoID.(string), req)
 	if err != nil {
 		if errors.Is(err, ErrRegisterNotFound) {
 			response.NotFound(c, "REGISTER_NOT_FOUND", "Register not found")
 			return
 		}
-		response.InternalServerError(c, "UPDATE_REGISTER_FAILED", err.Error())
+		response.ServerError(c, "UPDATE_REGISTER_FAILED", err)
 		return
 	}
 	response.OK(c, reg, "Register updated successfully")
@@ -144,7 +144,8 @@ func (h *Handler) UpdateRegister(c *gin.Context) {
 
 func (h *Handler) DeleteRegister(c *gin.Context) {
 	id := c.Param("id")
-	if err := h.service.DeleteRegister(c.Request.Context(), id); err != nil {
+	restoID, _ := c.Get(auth.CtxRestaurantID)
+	if err := h.service.DeleteRegister(c.Request.Context(), id, restoID.(string)); err != nil {
 		if errors.Is(err, ErrRegisterNotFound) {
 			response.NotFound(c, "REGISTER_NOT_FOUND", "Mesin kasir tidak ditemukan")
 			return
@@ -157,7 +158,7 @@ func (h *Handler) DeleteRegister(c *gin.Context) {
 			response.BadRequest(c, "REGISTER_HAS_HISTORY", "Mesin kasir memiliki riwayat shift/transaksi sehingga tidak dapat dihapus permanen demi keamanan data audit.")
 			return
 		}
-		response.InternalServerError(c, "DELETE_REGISTER_FAILED", err.Error())
+		response.ServerError(c, "DELETE_REGISTER_FAILED", err)
 		return
 	}
 	response.OK(c, gin.H{"deleted": true}, "Register berhasil dihapus")
@@ -171,7 +172,7 @@ func (h *Handler) GetCurrentShift(c *gin.Context) {
 
 	shift, err := h.service.GetCurrentShift(c.Request.Context(), restoID.(string), cashierID.(string))
 	if err != nil {
-		response.InternalServerError(c, "DB_ERROR", err.Error())
+		response.ServerError(c, "DB_ERROR", err)
 		return
 	}
 	if shift == nil {
@@ -205,7 +206,7 @@ func (h *Handler) OpenShift(c *gin.Context) {
 			response.BadRequest(c, "INVALID_BALANCE", "Opening balance cannot be negative")
 			return
 		}
-		response.InternalServerError(c, "OPEN_SHIFT_FAILED", err.Error())
+		response.ServerError(c, "OPEN_SHIFT_FAILED", err)
 		return
 	}
 	response.Created(c, shift, "Shift opened successfully")
@@ -219,7 +220,7 @@ func (h *Handler) GetShiftByID(c *gin.Context) {
 			response.NotFound(c, "SHIFT_NOT_FOUND", "Shift not found")
 			return
 		}
-		response.InternalServerError(c, "DB_ERROR", err.Error())
+		response.ServerError(c, "DB_ERROR", err)
 		return
 	}
 	response.OK(c, shift, "Shift retrieved successfully")
@@ -238,7 +239,7 @@ func (h *Handler) GetShiftTransactions(c *gin.Context) {
 
 	txs, total, err := h.service.GetShiftTransactions(c.Request.Context(), shiftID, txType, page, limit)
 	if err != nil {
-		response.InternalServerError(c, "DB_ERROR", err.Error())
+		response.ServerError(c, "DB_ERROR", err)
 		return
 	}
 
@@ -258,7 +259,7 @@ func (h *Handler) GetShiftSummary(c *gin.Context) {
 			response.NotFound(c, "SHIFT_NOT_FOUND", "Shift not found")
 			return
 		}
-		response.InternalServerError(c, "SUMMARY_FAILED", err.Error())
+		response.ServerError(c, "SUMMARY_FAILED", err)
 		return
 	}
 	response.OK(c, summary, "Shift summary calculated successfully")
@@ -284,7 +285,7 @@ func (h *Handler) CloseShift(c *gin.Context) {
 			response.NotFound(c, "SHIFT_NOT_FOUND", "Shift not found")
 			return
 		}
-		response.InternalServerError(c, "CLOSE_SHIFT_FAILED", err.Error())
+		response.ServerError(c, "CLOSE_SHIFT_FAILED", err)
 		return
 	}
 	response.OK(c, closing, "Shift closed successfully")
@@ -313,7 +314,7 @@ func (h *Handler) CreateRefund(c *gin.Context) {
 			response.BadRequest(c, "INVALID_AMOUNT", err.Error())
 			return
 		}
-		response.InternalServerError(c, "REFUND_FAILED", err.Error())
+		response.ServerError(c, "REFUND_FAILED", err)
 		return
 	}
 	response.Created(c, ref, "Refund processed successfully")
@@ -335,7 +336,7 @@ func (h *Handler) CreateVoid(c *gin.Context) {
 			response.Conflict(c, "INELIGIBLE_FOR_VOID", err.Error())
 			return
 		}
-		response.InternalServerError(c, "VOID_FAILED", err.Error())
+		response.ServerError(c, "VOID_FAILED", err)
 		return
 	}
 	response.OK(c, gin.H{"voided": true}, "Order voided successfully")
@@ -372,7 +373,7 @@ func (h *Handler) ListReports(c *gin.Context) {
 
 	shifts, err := h.service.ListReports(c.Request.Context(), restoID.(string), filters)
 	if err != nil {
-		response.InternalServerError(c, "REPORTS_FAILED", err.Error())
+		response.ServerError(c, "REPORTS_FAILED", err)
 		return
 	}
 	response.OK(c, shifts, "Shift reports retrieved successfully")
@@ -386,7 +387,7 @@ func (h *Handler) GetReportDetail(c *gin.Context) {
 			response.NotFound(c, "SHIFT_NOT_FOUND", "Shift not found")
 			return
 		}
-		response.InternalServerError(c, "REPORT_DETAIL_FAILED", err.Error())
+		response.ServerError(c, "REPORT_DETAIL_FAILED", err)
 		return
 	}
 	response.OK(c, report, "Shift report detail retrieved successfully")
@@ -402,9 +403,22 @@ func (h *Handler) ListOrders(c *gin.Context) {
 		status = &st
 	}
 
-	orders, err := h.orderService.ListOrders(c.Request.Context(), restoID.(string), status)
+	limit := 50
+	if l := c.Query("limit"); l != "" {
+		if v, err := strconv.Atoi(l); err == nil {
+			limit = v
+		}
+	}
+	offset := 0
+	if o := c.Query("offset"); o != "" {
+		if v, err := strconv.Atoi(o); err == nil && v >= 0 {
+			offset = v
+		}
+	}
+
+	orders, err := h.orderFacade.ListOrders(c.Request.Context(), restoID.(string), status, limit, offset)
 	if err != nil {
-		response.InternalServerError(c, "DB_ERROR", err.Error())
+		response.ServerError(c, "DB_ERROR", err)
 		return
 	}
 	response.OK(c, orders, "Orders retrieved successfully")
@@ -412,13 +426,13 @@ func (h *Handler) ListOrders(c *gin.Context) {
 
 func (h *Handler) GetOrder(c *gin.Context) {
 	id := c.Param("id")
-	o, err := h.orderService.GetOrderByID(c.Request.Context(), id)
+	o, err := h.orderFacade.GetOrder(c.Request.Context(), id)
 	if err != nil {
 		if errors.Is(err, order.ErrOrderNotFound) {
 			response.NotFound(c, "ORDER_NOT_FOUND", "Order not found")
 			return
 		}
-		response.InternalServerError(c, "DB_ERROR", err.Error())
+		response.ServerError(c, "DB_ERROR", err)
 		return
 	}
 	response.OK(c, o, "Order retrieved successfully")
@@ -428,7 +442,7 @@ func (h *Handler) ConfirmOrder(c *gin.Context) {
 	id := c.Param("id")
 	userID, _ := c.Get(auth.CtxUserID)
 
-	o, err := h.paymentService.ConfirmOrder(c.Request.Context(), id, userID.(string))
+	o, err := h.orderFacade.ConfirmOrder(c.Request.Context(), id, userID.(string))
 	if err != nil {
 		if errors.Is(err, order.ErrOrderNotFound) {
 			response.NotFound(c, "ORDER_NOT_FOUND", "Order not found")
@@ -438,7 +452,7 @@ func (h *Handler) ConfirmOrder(c *gin.Context) {
 			response.Conflict(c, "INVALID_STATE", "Order cannot transition to confirmed state")
 			return
 		}
-		response.InternalServerError(c, "CONFIRM_FAILED", err.Error())
+		response.ServerError(c, "CONFIRM_FAILED", err)
 		return
 	}
 	response.OK(c, o, "Order confirmed successfully")
@@ -472,7 +486,7 @@ func (h *Handler) ProcessPayment(c *gin.Context) {
 		}
 	}
 
-	res, err := h.paymentService.ProcessManualPayment(c.Request.Context(), payment.ProcessManualPaymentRequest{
+	res, err := h.orderFacade.ProcessPayment(c.Request.Context(), payment.ProcessManualPaymentRequest{
 		OrderID:         id,
 		RestaurantID:    restaurantID,
 		CashierID:       currentUserID,
@@ -501,7 +515,7 @@ func (h *Handler) ProcessPayment(c *gin.Context) {
 			response.Conflict(c, "ORDER_CANCELLED", err.Error())
 			return
 		}
-		response.InternalServerError(c, "PAYMENT_FAILED", err.Error())
+		response.ServerError(c, "PAYMENT_FAILED", err)
 		return
 	}
 
@@ -512,12 +526,12 @@ func (h *Handler) CancelOrder(c *gin.Context) {
 	id := c.Param("id")
 	userID, _ := c.Get(auth.CtxUserID)
 
-	if err := h.orderService.UpdateOrderStatus(c.Request.Context(), id, order.StatusCancelled, userID.(string)); err != nil {
+	if err := h.orderFacade.CancelOrder(c.Request.Context(), id, userID.(string)); err != nil {
 		if errors.Is(err, order.ErrInvalidStatusOrder) {
 			response.Conflict(c, "CANNOT_CANCEL", "Completed or already cancelled orders cannot be cancelled")
 			return
 		}
-		response.InternalServerError(c, "CANCEL_FAILED", err.Error())
+		response.ServerError(c, "CANCEL_FAILED", err)
 		return
 	}
 	response.OK(c, gin.H{"cancelled": true}, "Order cancelled successfully")
@@ -527,12 +541,12 @@ func (h *Handler) DeleteOrder(c *gin.Context) {
 	id := c.Param("id")
 	restoID, _ := c.Get(auth.CtxRestaurantID)
 
-	if err := h.orderService.DeleteOrder(c.Request.Context(), id, restoID.(string)); err != nil {
+	if err := h.orderFacade.DeleteOrder(c.Request.Context(), id, restoID.(string)); err != nil {
 		if errors.Is(err, order.ErrOrderNotFound) {
 			response.NotFound(c, "ORDER_NOT_FOUND", "Order not found")
 			return
 		}
-		response.InternalServerError(c, "DELETE_ORDER_FAILED", err.Error())
+		response.ServerError(c, "DELETE_ORDER_FAILED", err)
 		return
 	}
 	response.OK(c, gin.H{"deleted": true}, "Order deleted successfully")

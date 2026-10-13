@@ -3,7 +3,7 @@
 # ---------------------------------------------------------
 # Build Stage
 # ---------------------------------------------------------
-FROM golang:1.27-alpine AS builder
+FROM golang:1.26-alpine AS builder
 
 WORKDIR /app
 
@@ -27,12 +27,12 @@ RUN apk --no-cache add ca-certificates tzdata \
     && addgroup -S appgroup && adduser -S appuser -G appgroup
 
 COPY --from=builder /app/server /app/server
-COPY --from=builder /app/migrations /app/migrations
 
 USER appuser
 
 ENV APP_ENV=production
 ENV APP_PORT=8080
+ENV TZ=UTC
 
 EXPOSE 8080
 
