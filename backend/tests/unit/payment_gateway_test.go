@@ -13,7 +13,7 @@ import (
 
 func TestMidtransSignatureVerification(t *testing.T) {
 	serverKey := "SB-Mid-server-TESTKEY123"
-	gateway := payment.NewMidtransGateway(serverKey, true)
+	gateway := payment.NewMidtransGateway(serverKey, "whsec_test", true)
 
 	orderID := "ord_test_123"
 	statusCode := "200"
@@ -50,7 +50,7 @@ func TestMidtransSignatureVerification(t *testing.T) {
 }
 
 func TestMockGatewayVerify(t *testing.T) {
-	gateway := payment.NewMockGateway()
+	gateway := payment.NewMockGateway("test-webhook-secret")
 
 	payload := payment.MockWebhookPayload{
 		EventID:       "ev_001",
@@ -59,13 +59,30 @@ func TestMockGatewayVerify(t *testing.T) {
 		Amount:        25000,
 		Status:        "PAID",
 		PaymentMethod: "QRIS",
-		Signature:     "valid",
 	}
 	body, _ := json.Marshal(payload)
 
+	// Missing signature must be rejected.
 	headers := make(http.Header)
+	_, err := gateway.VerifyWebhook(headers, body)
+	assert.Error(t, err)
+
+	// Correct HMAC signature is accepted.
+	headers.Set("X-Mock-Signature", gateway.SignSignature(body))
 	res, err := gateway.VerifyWebhook(headers, body)
 	assert.NoError(t, err)
 	assert.Equal(t, payment.StatusPaid, res.Status)
 	assert.Equal(t, int64(25000), res.Amount)
+
+	// Tampered signature is rejected.
+	headers.Set("X-Mock-Signature", "deadbeef")
+	_, err = gateway.VerifyWebhook(headers, body)
+	assert.Error(t, err)
+
+	// Stale timestamp is rejected (anti-replay).
+	freshHeaders := make(http.Header)
+	freshHeaders.Set("X-Mock-Signature", gateway.SignSignature(body))
+	freshHeaders.Set("X-Webhook-Timestamp", "1000000") // year 1970
+	_, err = gateway.VerifyWebhook(freshHeaders, body)
+	assert.Error(t, err)
 }

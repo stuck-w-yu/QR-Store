@@ -15,12 +15,13 @@
 			error = null;
 			const user = await auth.login(email, password);
 			if (user.role === 'SUPERADMIN') {
-				goto('/superadmin');
+				await goto('/superadmin');
 			} else if (user.role === 'KITCHEN') {
-				goto('/kitchen/display');
+				await goto('/kitchen/display');
 			} else {
-				goto('/admin/dashboard');
+				await goto('/admin/dashboard');
 			}
+			return;
 		} catch (err: any) {
 			error = err?.message || 'Login gagal. Periksa kembali email dan password.';
 		} finally {

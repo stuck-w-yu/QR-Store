@@ -2,9 +2,12 @@ package order
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
-	"math/rand"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -15,11 +18,23 @@ import (
 )
 
 var (
-	ErrTableInactive      = errors.New("table is not active or not found")
-	ErrRestaurantInactive = errors.New("restaurant is not active")
-	ErrMenuUnavailable    = errors.New("one or more items are unavailable")
-	ErrEmptyOrder         = errors.New("order must contain at least one item")
+	ErrTableInactive       = errors.New("table is not active or not found")
+	ErrRestaurantInactive  = errors.New("restaurant is not active")
+	ErrMenuUnavailable     = errors.New("one or more items are unavailable")
+	ErrEmptyOrder          = errors.New("order must contain at least one item")
+	ErrOrderAccessDenied   = errors.New("order does not belong to this table session")
+	ErrProofNotAllowed     = errors.New("proof of payment is not allowed for this order status")
+	ErrInvalidProofURL     = errors.New("proof URL must point to an allowed image host")
 )
+
+// allowedProofHosts is the allowlist of hosts permitted for customer-uploaded
+// payment proof images (Google Drive / Googleusercontent CDN).
+var allowedProofHosts = map[string]bool{
+	"lh3.googleusercontent.com": true,
+	"drive.google.com":          true,
+	"docs.google.com":           true,
+	"script.googleusercontent.com": true,
+}
 
 type CreateOrderItemRequest struct {
 	MenuID            string   `json:"menu_id" binding:"required"`
@@ -37,10 +52,11 @@ type CreateOrderRequest struct {
 type Service interface {
 	CreatePublicOrder(ctx context.Context, req CreateOrderRequest) (*Order, error)
 	GetOrderByID(ctx context.Context, id string) (*Order, error)
-	ListOrders(ctx context.Context, restaurantID string, status *Status) ([]Order, error)
+	GetPublicOrder(ctx context.Context, id, qrToken string) (*Order, error)
+	ListOrders(ctx context.Context, restaurantID string, status *Status, limit, offset int) ([]Order, error)
 	ListKitchenOrders(ctx context.Context, restaurantID string) ([]Order, error)
 	UpdateOrderStatus(ctx context.Context, id string, newStatus Status, changedBy string) error
-	SubmitProofOfPayment(ctx context.Context, orderID string, proofURL string) (*Order, error)
+	SubmitProofOfPayment(ctx context.Context, orderID string, qrToken string, proofURL string) (*Order, error)
 	DeleteOrder(ctx context.Context, id string, restaurantID string) error
 	UpdateOrderDetails(ctx context.Context, id string, restaurantID string, notes *string, status *Status, paymentStatus *PaymentStatus) (*Order, error)
 	GetTodayAnalytics(ctx context.Context, restaurantID string) (map[string]interface{}, error)
@@ -154,19 +170,16 @@ func (s *service) CreatePublicOrder(ctx context.Context, req CreateOrderRequest)
 	}
 
 	// 3. Tax and Service calculations
-	tax := int64(float64(subtotal) * (tableInfo.Restaurant.TaxPercent / 100.0))
-	serviceCharge := int64(float64(subtotal) * (tableInfo.Restaurant.ServicePercent / 100.0))
-	total := subtotal + tax + serviceCharge
+	tax, serviceCharge, total := computeTotals(subtotal, tableInfo.Restaurant.TaxPercent, tableInfo.Restaurant.ServicePercent)
 
-	// 4. Generate human-readable order number
-	orderNum := fmt.Sprintf("ORD-%s-%04d", now.Format("060102"), rand.Intn(9999))
+	// 4. Generate human-readable order number with retry on collision.
+	orderID := "ord_" + uuid.New().String()[:8]
 
 	order := &Order{
-		ID:            "ord_" + uuid.New().String()[:8],
+		ID:            orderID,
 		RestaurantID:  restoID,
 		TableID:       tableID,
 		TableName:     tableInfo.Table.Name,
-		OrderNumber:   orderNum,
 		Status:        StatusWaitingPayment,
 		PaymentStatus: PaymentStatusUnpaid,
 		Subtotal:      subtotal,
@@ -184,8 +197,20 @@ func (s *service) CreatePublicOrder(ctx context.Context, req CreateOrderRequest)
 		orderItems[i].OrderID = order.ID
 	}
 
-	if err := s.orderRepo.Create(ctx, order, orderItems); err != nil {
-		return nil, err
+	const maxOrderNumberAttempts = 5
+	var createErr error
+	for attempt := 0; attempt < maxOrderNumberAttempts; attempt++ {
+		order.OrderNumber = generateOrderNumber(now)
+		createErr = s.orderRepo.Create(ctx, order, orderItems)
+		if createErr == nil {
+			break
+		}
+		if !errors.Is(createErr, ErrOrderNumberConflict) {
+			return nil, createErr
+		}
+	}
+	if createErr != nil {
+		return nil, createErr
 	}
 
 	if s.hub != nil {
@@ -201,8 +226,49 @@ func (s *service) GetOrderByID(ctx context.Context, id string) (*Order, error) {
 	return s.orderRepo.GetByID(ctx, id)
 }
 
-func (s *service) ListOrders(ctx context.Context, restaurantID string, status *Status) ([]Order, error) {
-	return s.orderRepo.List(ctx, restaurantID, status)
+// generateOrderNumber returns a human-readable, collision-resistant order number
+// of the form ORD-YYMMDD-XXXXXX using crypto/rand.
+func generateOrderNumber(t time.Time) string {
+	buf := make([]byte, 3)
+	if _, err := rand.Read(buf); err != nil {
+		// Fallback to nanoseconds if crypto/rand is unavailable (should not happen).
+		return fmt.Sprintf("ORD-%s-%06d", t.Format("060102"), t.UnixNano()%1000000)
+	}
+	return fmt.Sprintf("ORD-%s-%s", t.Format("060102"), strings.ToUpper(hex.EncodeToString(buf)))
+}
+
+// computeTotals derives tax, service charge and grand total from a subtotal
+// using the restaurant's percentage configuration. Kept as a pure function so
+// the money math can be unit-tested without database dependencies.
+func computeTotals(subtotal int64, taxPercent, servicePercent float64) (tax, serviceCharge, total int64) {
+	tax = int64(float64(subtotal) * (taxPercent / 100.0))
+	serviceCharge = int64(float64(subtotal) * (servicePercent / 100.0))
+	total = subtotal + tax + serviceCharge
+	return tax, serviceCharge, total
+}
+
+// GetPublicOrder returns an order only when the supplied QR token maps to the
+// table the order belongs to. This prevents IDOR on the public tracking route.
+func (s *service) GetPublicOrder(ctx context.Context, id, qrToken string) (*Order, error) {
+	if qrToken == "" {
+		return nil, ErrOrderAccessDenied
+	}
+	o, err := s.orderRepo.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	tableInfo, err := s.tableRepo.GetByQRToken(ctx, qrToken)
+	if err != nil {
+		return nil, ErrOrderAccessDenied
+	}
+	if tableInfo.Table.ID != o.TableID || tableInfo.Restaurant.ID != o.RestaurantID {
+		return nil, ErrOrderAccessDenied
+	}
+	return o, nil
+}
+
+func (s *service) ListOrders(ctx context.Context, restaurantID string, status *Status, limit, offset int) ([]Order, error) {
+	return s.orderRepo.List(ctx, restaurantID, status, limit, offset)
 }
 
 func (s *service) ListKitchenOrders(ctx context.Context, restaurantID string) ([]Order, error) {
@@ -241,12 +307,26 @@ func (s *service) UpdateOrderStatus(ctx context.Context, id string, newStatus St
 	return nil
 }
 
-func (s *service) SubmitProofOfPayment(ctx context.Context, orderID string, proofURL string) (*Order, error) {
+func (s *service) SubmitProofOfPayment(ctx context.Context, orderID string, qrToken string, proofURL string) (*Order, error) {
+	if !isAllowedProofURL(proofURL) {
+		return nil, ErrInvalidProofURL
+	}
+
+	o, err := s.GetPublicOrder(ctx, orderID, qrToken)
+	if err != nil {
+		return nil, err
+	}
+
+	// Only orders awaiting payment may receive proof.
+	if o.Status != StatusWaitingPayment && o.Status != StatusPendingConfirmation {
+		return nil, ErrProofNotAllowed
+	}
+
 	if err := s.orderRepo.UpdateProofURL(ctx, orderID, proofURL); err != nil {
 		return nil, err
 	}
 
-	o, err := s.orderRepo.GetByID(ctx, orderID)
+	o, err = s.orderRepo.GetByID(ctx, orderID)
 	if err != nil {
 		return nil, err
 	}
@@ -263,6 +343,16 @@ func (s *service) SubmitProofOfPayment(ctx context.Context, orderID string, proo
 	}
 
 	return o, nil
+}
+
+// isAllowedProofURL validates that proofURL is an http(s) URL on an allowed host.
+func isAllowedProofURL(proofURL string) bool {
+	u, err := url.Parse(proofURL)
+	if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
+		return false
+	}
+	host := strings.ToLower(u.Hostname())
+	return allowedProofHosts[host]
 }
 
 func (s *service) GetTodayAnalytics(ctx context.Context, restaurantID string) (map[string]interface{}, error) {

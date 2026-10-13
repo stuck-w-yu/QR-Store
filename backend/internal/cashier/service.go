@@ -59,10 +59,10 @@ type ShiftReportDetail struct {
 type Service interface {
 	// Register
 	ListRegisters(ctx context.Context, restaurantID string) ([]Register, error)
-	GetRegister(ctx context.Context, id string) (*Register, error)
+	GetRegister(ctx context.Context, id, restaurantID string) (*Register, error)
 	CreateRegister(ctx context.Context, restaurantID string, req CreateRegisterRequest) (*Register, error)
-	UpdateRegister(ctx context.Context, id string, req UpdateRegisterRequest) (*Register, error)
-	DeleteRegister(ctx context.Context, id string) error
+	UpdateRegister(ctx context.Context, id, restaurantID string, req UpdateRegisterRequest) (*Register, error)
+	DeleteRegister(ctx context.Context, id, restaurantID string) error
 
 	// Shift
 	OpenShift(ctx context.Context, restaurantID, cashierID string, req OpenShiftRequest) (*CashierShift, error)
@@ -111,8 +111,8 @@ func (s *service) ListRegisters(ctx context.Context, restaurantID string) ([]Reg
 	return s.cashierRepo.ListRegisters(ctx, restaurantID)
 }
 
-func (s *service) GetRegister(ctx context.Context, id string) (*Register, error) {
-	return s.cashierRepo.GetRegisterByID(ctx, id)
+func (s *service) GetRegister(ctx context.Context, id, restaurantID string) (*Register, error) {
+	return s.cashierRepo.GetRegisterByID(ctx, id, restaurantID)
 }
 
 func (s *service) CreateRegister(ctx context.Context, restaurantID string, req CreateRegisterRequest) (*Register, error) {
@@ -131,8 +131,8 @@ func (s *service) CreateRegister(ctx context.Context, restaurantID string, req C
 	return reg, nil
 }
 
-func (s *service) UpdateRegister(ctx context.Context, id string, req UpdateRegisterRequest) (*Register, error) {
-	reg, err := s.cashierRepo.GetRegisterByID(ctx, id)
+func (s *service) UpdateRegister(ctx context.Context, id, restaurantID string, req UpdateRegisterRequest) (*Register, error) {
+	reg, err := s.cashierRepo.GetRegisterByID(ctx, id, restaurantID)
 	if err != nil {
 		return nil, err
 	}
@@ -148,8 +148,8 @@ func (s *service) UpdateRegister(ctx context.Context, id string, req UpdateRegis
 	return reg, nil
 }
 
-func (s *service) DeleteRegister(ctx context.Context, id string) error {
-	return s.cashierRepo.DeleteRegister(ctx, id)
+func (s *service) DeleteRegister(ctx context.Context, id, restaurantID string) error {
+	return s.cashierRepo.DeleteRegister(ctx, id, restaurantID)
 }
 
 // ----------------- SHIFTS -----------------
@@ -159,7 +159,7 @@ func (s *service) OpenShift(ctx context.Context, restaurantID, cashierID string,
 		return nil, ErrOpeningBalanceNegative
 	}
 
-	reg, err := s.cashierRepo.GetRegisterByID(ctx, req.RegisterID)
+	reg, err := s.cashierRepo.GetRegisterByID(ctx, req.RegisterID, restaurantID)
 	if err != nil {
 		return nil, err
 	}

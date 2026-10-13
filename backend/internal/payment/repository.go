@@ -20,6 +20,7 @@ type Repository interface {
 	GetByOrderID(ctx context.Context, orderID string) (*Payment, error)
 	Update(ctx context.Context, p *Payment) error
 	RecordWebhookEvent(ctx context.Context, ev *WebhookEvent) (isDuplicate bool, err error)
+	MarkWebhookEventProcessed(ctx context.Context, id string, processed bool) error
 	ProcessPaymentSuccess(ctx context.Context, orderID string, paymentID string, paidAt time.Time, method string, txID string) (*order.Order, error)
 }
 
@@ -125,6 +126,15 @@ func (r *repository) RecordWebhookEvent(ctx context.Context, ev *WebhookEvent) (
 		return true, nil
 	}
 	return false, nil
+}
+
+// MarkWebhookEventProcessed finalizes the processing flag for a webhook event.
+// It is called only after the order state has been successfully updated, so a
+// crash mid-processing leaves the event unprocessed and eligible for retry.
+func (r *repository) MarkWebhookEventProcessed(ctx context.Context, id string, processed bool) error {
+	query := `UPDATE payment_webhook_events SET processed = $1 WHERE id = $2`
+	_, err := r.pool.Exec(ctx, query, processed, id)
+	return err
 }
 
 func (r *repository) ProcessPaymentSuccess(ctx context.Context, orderID string, paymentID string, paidAt time.Time, method string, txID string) (*order.Order, error) {

@@ -7,19 +7,23 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 var (
 	ErrOrderNotFound      = errors.New("order not found")
 	ErrInvalidStatusOrder = errors.New("invalid status transition")
+	// ErrOrderNumberConflict signals a duplicate order_number (unique violation);
+	// callers may retry with a freshly generated number.
+	ErrOrderNumberConflict = errors.New("order number already exists")
 )
 
 type Repository interface {
 	Create(ctx context.Context, o *Order, items []OrderItem) error
 	GetByID(ctx context.Context, id string) (*Order, error)
 	GetByOrderNumber(ctx context.Context, orderNum string) (*Order, error)
-	List(ctx context.Context, restaurantID string, status *Status) ([]Order, error)
+	List(ctx context.Context, restaurantID string, status *Status, limit, offset int) ([]Order, error)
 	ListKitchenOrders(ctx context.Context, restaurantID string) ([]Order, error)
 	UpdateStatus(ctx context.Context, id string, newStatus Status, changedBy *string) error
 	UpdateProofURL(ctx context.Context, id string, proofURL string) error
@@ -58,6 +62,9 @@ func (r *repository) Create(ctx context.Context, o *Order, items []OrderItem) er
 		o.Subtotal, o.Tax, o.ServiceCharge, o.Discount, o.Total, o.Notes, o.CreatedAt, o.UpdatedAt,
 	)
 	if err != nil {
+		if isOrderNumberConflict(err) {
+			return ErrOrderNumberConflict
+		}
 		return err
 	}
 
@@ -88,6 +95,19 @@ func (r *repository) Create(ctx context.Context, o *Order, items []OrderItem) er
 	return tx.Commit(ctx)
 }
 
+// isOrderNumberConflict reports whether err is a unique-violation on orders.order_number.
+func isOrderNumberConflict(err error) bool {
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) {
+		return false
+	}
+	// 23505 = unique_violation. Accept either the column-constraint default name
+	// or a custom composite index name, to stay robust across schema variants.
+	return pgErr.Code == "23505" &&
+		(pgErr.ConstraintName == "orders_order_number_key" ||
+			pgErr.ConstraintName == "orders_restaurant_id_order_number_key")
+}
+
 func (r *repository) GetByID(ctx context.Context, id string) (*Order, error) {
 	query := `
 		SELECT o.id, o.restaurant_id, o.table_id, t.name as table_name, o.table_session_id,
@@ -113,9 +133,10 @@ func (r *repository) GetByID(ctx context.Context, id string) (*Order, error) {
 	}
 
 	items, err := r.GetOrderItems(ctx, o.ID)
-	if err == nil {
-		o.Items = items
+	if err != nil {
+		return nil, err
 	}
+	o.Items = items
 	return &o, nil
 }
 
@@ -144,13 +165,20 @@ func (r *repository) GetByOrderNumber(ctx context.Context, orderNum string) (*Or
 	}
 
 	items, err := r.GetOrderItems(ctx, o.ID)
-	if err == nil {
-		o.Items = items
+	if err != nil {
+		return nil, err
 	}
+	o.Items = items
 	return &o, nil
 }
 
-func (r *repository) List(ctx context.Context, restaurantID string, status *Status) ([]Order, error) {
+func (r *repository) List(ctx context.Context, restaurantID string, status *Status, limit, offset int) ([]Order, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	if offset < 0 {
+		offset = 0
+	}
 	query := `
 		SELECT o.id, o.restaurant_id, o.table_id, t.name as table_name, o.table_session_id,
 		       o.order_number, o.status, COALESCE(o.payment_status, 'UNPAID'), o.payment_method,
@@ -160,9 +188,9 @@ func (r *repository) List(ctx context.Context, restaurantID string, status *Stat
 		LEFT JOIN tables t ON t.id = o.table_id
 		WHERE o.restaurant_id = $1 AND ($2::varchar IS NULL OR o.status = $2)
 		ORDER BY o.created_at DESC
-		LIMIT 100
+		LIMIT $3 OFFSET $4
 	`
-	rows, err := r.pool.Query(ctx, query, restaurantID, status)
+	rows, err := r.pool.Query(ctx, query, restaurantID, status, limit, offset)
 	if err != nil {
 		return nil, err
 	}

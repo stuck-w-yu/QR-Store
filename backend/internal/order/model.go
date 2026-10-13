@@ -54,10 +54,12 @@ func IsValidTransition(from, to Status) bool {
 	case StatusCompleted:
 		return to == StatusCancelled || to == StatusServed
 	case StatusCancelled:
-		// Izinkan kasir memulihkan pesanan yang dibatalkan
-		return to == StatusWaitingPayment || to == StatusConfirmed || to == StatusPreparing
+		// Cancelled is terminal. Reopening a cancelled order requires a
+		// dedicated, audited action rather than a silent status transition.
+		return false
 	default:
-		return true
+		// Fail-closed: unknown statuses must not be transitioned.
+		return false
 	}
 }
 

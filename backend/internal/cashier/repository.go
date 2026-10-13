@@ -36,10 +36,10 @@ type ShiftFilter struct {
 type Repository interface {
 	// Register
 	ListRegisters(ctx context.Context, restaurantID string) ([]Register, error)
-	GetRegisterByID(ctx context.Context, id string) (*Register, error)
+	GetRegisterByID(ctx context.Context, id, restaurantID string) (*Register, error)
 	CreateRegister(ctx context.Context, reg *Register) error
 	UpdateRegister(ctx context.Context, reg *Register) error
-	DeleteRegister(ctx context.Context, id string) error
+	DeleteRegister(ctx context.Context, id, restaurantID string) error
 
 	// Shift
 	CreateShift(ctx context.Context, shift *CashierShift) error
@@ -104,14 +104,14 @@ func (r *repository) ListRegisters(ctx context.Context, restaurantID string) ([]
 	return list, nil
 }
 
-func (r *repository) GetRegisterByID(ctx context.Context, id string) (*Register, error) {
+func (r *repository) GetRegisterByID(ctx context.Context, id, restaurantID string) (*Register, error) {
 	query := `
 		SELECT id, restaurant_id, outlet_id, name, status, created_at, updated_at
 		FROM registers
-		WHERE id = $1
+		WHERE id = $1 AND restaurant_id = $2
 	`
 	var reg Register
-	err := r.pool.QueryRow(ctx, query, id).Scan(
+	err := r.pool.QueryRow(ctx, query, id, restaurantID).Scan(
 		&reg.ID, &reg.RestaurantID, &reg.OutletID, &reg.Name, &reg.Status, &reg.CreatedAt, &reg.UpdatedAt,
 	)
 	if err != nil {
@@ -145,9 +145,9 @@ func (r *repository) UpdateRegister(ctx context.Context, reg *Register) error {
 	return err
 }
 
-func (r *repository) DeleteRegister(ctx context.Context, id string) error {
+func (r *repository) DeleteRegister(ctx context.Context, id, restaurantID string) error {
 	var exists bool
-	err := r.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM registers WHERE id = $1)`, id).Scan(&exists)
+	err := r.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM registers WHERE id = $1 AND restaurant_id = $2)`, id, restaurantID).Scan(&exists)
 	if err != nil {
 		return err
 	}
@@ -173,8 +173,8 @@ func (r *repository) DeleteRegister(ctx context.Context, id string) error {
 		return ErrRegisterHasShiftHistory
 	}
 
-	query := `DELETE FROM registers WHERE id = $1`
-	_, err = r.pool.Exec(ctx, query, id)
+	query := `DELETE FROM registers WHERE id = $1 AND restaurant_id = $2`
+	_, err = r.pool.Exec(ctx, query, id, restaurantID)
 	return err
 }
 
@@ -363,7 +363,6 @@ func (r *repository) ListShifts(ctx context.Context, restaurantID string, filter
 	if filters.EndDate != nil {
 		query += fmt.Sprintf(" AND s.opened_at <= $%d", idx)
 		args = append(args, *filters.EndDate)
-		idx++
 	}
 
 	query += " ORDER BY s.opened_at DESC"

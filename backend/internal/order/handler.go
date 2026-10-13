@@ -2,6 +2,7 @@ package order
 
 import (
 	"errors"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"qr-store/backend/internal/auth"
@@ -65,10 +66,10 @@ func (h *Handler) CreatePublicOrder(c *gin.Context) {
 			return
 		}
 		if errors.Is(err, ErrMenuUnavailable) {
-			response.Conflict(c, "ITEM_UNAVAILABLE", err.Error())
+			response.Conflict(c, "ITEM_UNAVAILABLE", "One or more items are unavailable")
 			return
 		}
-		response.InternalServerError(c, "CREATE_ORDER_FAILED", err.Error())
+		response.InternalServerError(c, "CREATE_ORDER_FAILED", "Failed to create order")
 		return
 	}
 
@@ -77,13 +78,18 @@ func (h *Handler) CreatePublicOrder(c *gin.Context) {
 
 func (h *Handler) GetPublicOrder(c *gin.Context) {
 	id := c.Param("id")
-	order, err := h.service.GetOrderByID(c.Request.Context(), id)
+	qrToken := publicToken(c)
+	order, err := h.service.GetPublicOrder(c.Request.Context(), id, qrToken)
 	if err != nil {
 		if errors.Is(err, ErrOrderNotFound) {
 			response.NotFound(c, "ORDER_NOT_FOUND", "Order not found")
 			return
 		}
-		response.InternalServerError(c, "DB_ERROR", err.Error())
+		if errors.Is(err, ErrOrderAccessDenied) {
+			response.Forbidden(c, "ORDER_ACCESS_DENIED", "You are not allowed to view this order")
+			return
+		}
+		response.InternalServerError(c, "DB_ERROR", "Failed to retrieve order")
 		return
 	}
 	response.OK(c, order, "Order retrieved successfully")
@@ -91,13 +97,18 @@ func (h *Handler) GetPublicOrder(c *gin.Context) {
 
 func (h *Handler) GetPublicOrderStatus(c *gin.Context) {
 	id := c.Param("id")
-	order, err := h.service.GetOrderByID(c.Request.Context(), id)
+	qrToken := publicToken(c)
+	order, err := h.service.GetPublicOrder(c.Request.Context(), id, qrToken)
 	if err != nil {
 		if errors.Is(err, ErrOrderNotFound) {
 			response.NotFound(c, "ORDER_NOT_FOUND", "Order not found")
 			return
 		}
-		response.InternalServerError(c, "DB_ERROR", err.Error())
+		if errors.Is(err, ErrOrderAccessDenied) {
+			response.Forbidden(c, "ORDER_ACCESS_DENIED", "You are not allowed to view this order")
+			return
+		}
+		response.InternalServerError(c, "DB_ERROR", "Failed to retrieve order status")
 		return
 	}
 	response.OK(c, gin.H{
@@ -112,6 +123,17 @@ func (h *Handler) GetPublicOrderStatus(c *gin.Context) {
 	}, "Order status retrieved successfully")
 }
 
+// publicToken extracts the customer's QR session token from query/header.
+func publicToken(c *gin.Context) string {
+	if t := c.Query("qr_token"); t != "" {
+		return t
+	}
+	if h := c.GetHeader("X-QR-Token"); h != "" {
+		return h
+	}
+	return ""
+}
+
 func (h *Handler) ListOrders(c *gin.Context) {
 	restoID, _ := c.Get(auth.CtxRestaurantID)
 	var status *Status
@@ -120,9 +142,22 @@ func (h *Handler) ListOrders(c *gin.Context) {
 		status = &st
 	}
 
-	orders, err := h.service.ListOrders(c.Request.Context(), restoID.(string), status)
+	limit := 50
+	if l := c.Query("limit"); l != "" {
+		if v, err := strconv.Atoi(l); err == nil {
+			limit = v
+		}
+	}
+	offset := 0
+	if o := c.Query("offset"); o != "" {
+		if v, err := strconv.Atoi(o); err == nil && v >= 0 {
+			offset = v
+		}
+	}
+
+	orders, err := h.service.ListOrders(c.Request.Context(), restoID.(string), status, limit, offset)
 	if err != nil {
-		response.InternalServerError(c, "DB_ERROR", err.Error())
+		response.ServerError(c, "DB_ERROR", err)
 		return
 	}
 	response.OK(c, orders, "Orders retrieved successfully")
@@ -136,7 +171,7 @@ func (h *Handler) GetOrder(c *gin.Context) {
 			response.NotFound(c, "ORDER_NOT_FOUND", "Order not found")
 			return
 		}
-		response.InternalServerError(c, "DB_ERROR", err.Error())
+		response.InternalServerError(c, "DB_ERROR", "Failed to retrieve order")
 		return
 	}
 	response.OK(c, order, "Order retrieved successfully")
@@ -157,7 +192,7 @@ func (h *Handler) UpdateStatus(c *gin.Context) {
 			response.Conflict(c, "INVALID_STATUS_TRANSITION", "This order cannot transition to the requested status")
 			return
 		}
-		response.InternalServerError(c, "UPDATE_STATUS_FAILED", err.Error())
+		response.InternalServerError(c, "UPDATE_STATUS_FAILED", "Failed to update order status")
 		return
 	}
 
@@ -173,7 +208,7 @@ func (h *Handler) CancelOrder(c *gin.Context) {
 			response.Conflict(c, "CANNOT_CANCEL", "Completed or cancelled orders cannot be cancelled")
 			return
 		}
-		response.InternalServerError(c, "CANCEL_FAILED", err.Error())
+		response.InternalServerError(c, "CANCEL_FAILED", "Failed to cancel order")
 		return
 	}
 
@@ -196,7 +231,7 @@ func (h *Handler) UpdateOrderDetails(c *gin.Context) {
 			response.NotFound(c, "ORDER_NOT_FOUND", "Order not found")
 			return
 		}
-		response.InternalServerError(c, "UPDATE_DETAILS_FAILED", err.Error())
+		response.InternalServerError(c, "UPDATE_DETAILS_FAILED", "Failed to update order details")
 		return
 	}
 
@@ -212,7 +247,7 @@ func (h *Handler) DeleteOrder(c *gin.Context) {
 			response.NotFound(c, "ORDER_NOT_FOUND", "Order not found")
 			return
 		}
-		response.InternalServerError(c, "DELETE_ORDER_FAILED", err.Error())
+		response.InternalServerError(c, "DELETE_ORDER_FAILED", "Failed to delete order")
 		return
 	}
 
@@ -223,7 +258,7 @@ func (h *Handler) GetTodayAnalytics(c *gin.Context) {
 	restoID, _ := c.Get(auth.CtxRestaurantID)
 	stats, err := h.service.GetTodayAnalytics(c.Request.Context(), restoID.(string))
 	if err != nil {
-		response.InternalServerError(c, "ANALYTICS_FAILED", err.Error())
+		response.InternalServerError(c, "ANALYTICS_FAILED", "Failed to load analytics")
 		return
 	}
 	response.OK(c, stats, "Today's analytics retrieved successfully")
@@ -233,17 +268,25 @@ func (h *Handler) SubmitProof(c *gin.Context) {
 	id := c.Param("id")
 	var req SubmitProofRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.BadRequest(c, "INVALID_REQUEST", err.Error())
+		response.BadRequest(c, "INVALID_REQUEST", "Invalid request body")
 		return
 	}
 
-	o, err := h.service.SubmitProofOfPayment(c.Request.Context(), id, req.ProofURL)
+	qrToken := publicToken(c)
+	o, err := h.service.SubmitProofOfPayment(c.Request.Context(), id, qrToken, req.ProofURL)
 	if err != nil {
-		if errors.Is(err, ErrOrderNotFound) {
+		switch {
+		case errors.Is(err, ErrOrderNotFound):
 			response.NotFound(c, "ORDER_NOT_FOUND", "Order not found")
-			return
+		case errors.Is(err, ErrOrderAccessDenied):
+			response.Forbidden(c, "ORDER_ACCESS_DENIED", "You are not allowed to modify this order")
+		case errors.Is(err, ErrInvalidProofURL):
+			response.BadRequest(c, "INVALID_PROOF_URL", "Proof URL must point to an allowed image host")
+		case errors.Is(err, ErrProofNotAllowed):
+			response.Conflict(c, "PROOF_NOT_ALLOWED", "Proof of payment is not allowed for this order status")
+		default:
+			response.InternalServerError(c, "SUBMIT_PROOF_FAILED", "Failed to submit proof of payment")
 		}
-		response.InternalServerError(c, "SUBMIT_PROOF_FAILED", err.Error())
 		return
 	}
 

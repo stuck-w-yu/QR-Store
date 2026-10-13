@@ -18,7 +18,6 @@ import (
 var (
 	ErrOrderAlreadyPaid       = errors.New("order is already paid")
 	ErrInvalidAmount          = errors.New("webhook amount does not match order total")
-	ErrWebhookDuplicate       = errors.New("webhook event already processed")
 	ErrInsufficientPaidAmount = errors.New("paid amount is less than order total")
 	ErrInvalidPaymentMethod   = errors.New("invalid payment method")
 	ErrOrderCancelled         = errors.New("cannot process payment for cancelled order")
@@ -155,7 +154,7 @@ func (s *service) ProcessWebhook(ctx context.Context, headers http.Header, rawBo
 		EventID:   result.EventID,
 		EventType: &result.EventType,
 		Payload:   string(rawBody),
-		Processed: true,
+		Processed: false, // finalized only after successful processing
 		CreatedAt: now,
 	}
 
@@ -220,6 +219,11 @@ func (s *service) ProcessWebhook(ctx context.Context, headers http.Header, rawBo
 		}
 	}
 
+	// Finalize idempotency: only now is the event considered fully processed.
+	if err := s.paymentRepo.MarkWebhookEventProcessed(ctx, event.ID, true); err != nil {
+		logger.Log.Error("failed to mark webhook event processed", "event_id", result.EventID, "error", err)
+	}
+
 	return result, nil
 }
 
@@ -252,12 +256,18 @@ func (s *service) SimulatePay(ctx context.Context, orderID string, paymentMethod
 		Amount:        o.Total,
 		Status:        "PAID",
 		PaymentMethod: method,
-		Signature:     "valid",
 	}
 	body, _ := json.Marshal(mockPayload)
 
 	headers := make(http.Header)
 	headers.Set("Content-Type", "application/json")
+
+	// When using the mock gateway we must sign the payload exactly as the real
+	// provider would, otherwise VerifyWebhook rejects our own simulation.
+	if mg, ok := s.gateway.(*MockGateway); ok {
+		headers.Set("X-Mock-Signature", mg.SignSignature(body))
+		headers.Set("X-Webhook-Timestamp", fmt.Sprintf("%d", time.Now().Unix()))
+	}
 
 	_, err = s.ProcessWebhook(ctx, headers, body)
 	if err != nil {

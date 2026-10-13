@@ -22,11 +22,14 @@ class CartStore {
 	}
 
 	private getStorageKey(): string {
-		return `qr_cart_${this.qrToken || 'default'}`;
+		return `qr_cart_${this.qrToken}`;
 	}
 
 	private saveToStorage() {
 		if (typeof window === 'undefined') return;
+		// Never persist before a table session is known, to avoid mixing carts
+		// from different tables under a shared "default" key.
+		if (!this.qrToken) return;
 		try {
 			localStorage.setItem(this.getStorageKey(), JSON.stringify(this.items));
 		} catch (e) {
@@ -36,10 +39,16 @@ class CartStore {
 
 	private loadFromStorage() {
 		if (typeof window === 'undefined') return;
+		if (!this.qrToken) {
+			this.items = [];
+			return;
+		}
 		try {
 			const saved = localStorage.getItem(this.getStorageKey());
 			if (saved) {
 				this.items = JSON.parse(saved);
+			} else {
+				this.items = [];
 			}
 		} catch (e) {
 			this.items = [];
@@ -47,6 +56,10 @@ class CartStore {
 	}
 
 	setSession(token: string, info: PublicTableInfo) {
+		if (this.qrToken && this.qrToken !== token) {
+			// Switching tables: drop the previous table's in-memory cart.
+			this.items = [];
+		}
 		this.qrToken = token;
 		this.tableInfo = info;
 		this.loadFromStorage();
