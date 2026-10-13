@@ -2,19 +2,28 @@ package payment
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
 )
 
-type MockGateway struct{}
+// webhookMaxSkew bounds how old a signed webhook may be (anti-replay).
+const webhookMaxSkew = 5 * time.Minute
 
-func NewMockGateway() *MockGateway {
-	return &MockGateway{}
+type MockGateway struct {
+	WebhookSecret string
+}
+
+func NewMockGateway(webhookSecret string) *MockGateway {
+	return &MockGateway{WebhookSecret: webhookSecret}
 }
 
 func (m *MockGateway) Name() string {
@@ -46,16 +55,43 @@ type MockWebhookPayload struct {
 	Signature     string `json:"signature"`
 }
 
+// SignSignature produces the HMAC-SHA256 signature expected in the
+// X-Mock-Signature header (hex encoded).
+func (m *MockGateway) SignSignature(rawBody []byte) string {
+	mac := hmac.New(sha256.New, []byte(m.WebhookSecret))
+	mac.Write(rawBody)
+	return hex.EncodeToString(mac.Sum(nil))
+}
+
 func (m *MockGateway) VerifyWebhook(headers http.Header, rawBody []byte) (*WebhookResult, error) {
+	if m.WebhookSecret == "" {
+		return nil, errors.New("webhook secret is not configured")
+	}
+
+	// Anti-replay: require a fresh timestamp within the allowed skew.
+	tsHeader := headers.Get("X-Webhook-Timestamp")
+	if tsHeader != "" {
+		ts, err := strconv.ParseInt(tsHeader, 10, 64)
+		if err != nil {
+			return nil, errors.New("invalid webhook timestamp")
+		}
+		if time.Since(time.Unix(ts, 0)).Abs() > webhookMaxSkew {
+			return nil, errors.New("webhook timestamp outside allowed window")
+		}
+	}
+
+	providedSig := headers.Get("X-Mock-Signature")
+	if providedSig == "" {
+		return nil, errors.New("missing webhook signature")
+	}
+	expectedSig := m.SignSignature(rawBody)
+	if !hmac.Equal([]byte(expectedSig), []byte(providedSig)) {
+		return nil, errors.New("invalid webhook signature")
+	}
+
 	var payload MockWebhookPayload
 	if err := json.Unmarshal(rawBody, &payload); err != nil {
 		return nil, errors.New("invalid webhook payload json")
-	}
-
-	// Signature verification simulation
-	expectedSig := headers.Get("X-Mock-Signature")
-	if expectedSig != "" && expectedSig == "invalid-sig" {
-		return nil, errors.New("invalid webhook signature")
 	}
 
 	status := StatusPending

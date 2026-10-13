@@ -2,6 +2,7 @@ package payment
 
 import (
 	"context"
+	"crypto/hmac"
 	"crypto/sha512"
 	"encoding/hex"
 	"encoding/json"
@@ -12,14 +13,16 @@ import (
 )
 
 type MidtransGateway struct {
-	ServerKey string
-	IsSandbox bool
+	ServerKey     string
+	WebhookSecret string
+	IsSandbox     bool
 }
 
-func NewMidtransGateway(serverKey string, isSandbox bool) *MidtransGateway {
+func NewMidtransGateway(serverKey, webhookSecret string, isSandbox bool) *MidtransGateway {
 	return &MidtransGateway{
-		ServerKey: serverKey,
-		IsSandbox: isSandbox,
+		ServerKey:     serverKey,
+		WebhookSecret: webhookSecret,
+		IsSandbox:     isSandbox,
 	}
 }
 
@@ -60,11 +63,14 @@ func (m *MidtransGateway) VerifyWebhook(headers http.Header, rawBody []byte) (*W
 	}
 
 	// Verify SHA-512 signature: SHA512(order_id + status_code + gross_amount + server_key)
+	if m.ServerKey == "" {
+		return nil, errors.New("midtrans server key is not configured")
+	}
 	rawSig := payload.OrderID + payload.StatusCode + payload.GrossAmount + m.ServerKey
 	hash := sha512.Sum512([]byte(rawSig))
 	calculatedSig := hex.EncodeToString(hash[:])
 
-	if m.ServerKey != "" && payload.SignatureKey != calculatedSig {
+	if !hmac.Equal([]byte(calculatedSig), []byte(payload.SignatureKey)) {
 		return nil, errors.New("invalid midtrans webhook signature")
 	}
 

@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"qr-store/backend/pkg/logger"
 )
 
 type APIResponse struct {
@@ -94,4 +95,22 @@ func InternalServerError(c *gin.Context, code string, message string) {
 		code = "INTERNAL_SERVER_ERROR"
 	}
 	Error(c, http.StatusInternalServerError, code, message)
+}
+
+// ServerError logs the underlying error (server-side only) and returns a
+// generic message to the client, preventing internal/database details from
+// leaking in 5xx responses. Use this instead of passing err.Error() through.
+func ServerError(c *gin.Context, code string, err error) {
+	if err != nil {
+		logger.Log.Error("request failed",
+			"code", code,
+			"path", c.Request.URL.Path,
+			"method", c.Request.Method,
+			"error", err,
+		)
+	}
+	if code == "" {
+		code = "INTERNAL_SERVER_ERROR"
+	}
+	Error(c, http.StatusInternalServerError, code, "An internal error occurred. Please try again later.")
 }

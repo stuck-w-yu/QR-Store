@@ -1,14 +1,44 @@
 /**
  * Google Drive Image Bucket Client Service
- * 
+ *
  * Menangani upload dan penghapusan gambar di Google Drive melalui Google Apps Script Web App.
  * Dilengkapi dengan kompresi gambar berbasis canvas di sisi klien agar upload cepat
  * dan hemat kuota data.
  */
 
-export const GDRIVE_UPLOAD_URL: string =
-	(typeof import.meta !== 'undefined' && import.meta.env?.VITE_GDRIVE_UPLOAD_URL) ||
-	'https://script.google.com/macros/s/AKfycbyU1JH6bhyUALSodmzt4vyqneMx3_vI0V7WxS7VCiAJGZ904JVcgg8_YVulTrn5lD8jnA/exec';
+function resolveUploadUrl(): string {
+	const fromEnv =
+		typeof import.meta !== 'undefined' && import.meta.env?.VITE_GDRIVE_UPLOAD_URL
+			? String(import.meta.env.VITE_GDRIVE_UPLOAD_URL)
+			: '';
+	if (!fromEnv) {
+		throw new Error(
+			'VITE_GDRIVE_UPLOAD_URL belum dikonfigurasi. Set env ini ke URL deployment Google Apps Script Anda.'
+		);
+	}
+	return fromEnv;
+}
+
+// Secret untuk operasi delete (harus cocok dengan BUCKET_DELETE_SECRET di GAS).
+function getDeleteSecret(): string {
+	return typeof import.meta !== 'undefined' && import.meta.env?.VITE_GDRIVE_DELETE_SECRET
+		? String(import.meta.env.VITE_GDRIVE_DELETE_SECRET)
+		: '';
+}
+
+// Token delete = SHA-256(secret + ":" + fileId) dalam hex, dihitung via WebCrypto.
+async function computeDeleteToken(secret: string, fileId: string): Promise<string> {
+	if (typeof crypto === 'undefined' || !crypto.subtle) {
+		// Fallback: tidak ada WebCrypto -> kembalikan string kosong (delete akan ditolak server).
+		return '';
+	}
+	const enc = new TextEncoder();
+	const data = enc.encode(`${secret}:${fileId}`);
+	const hash = await crypto.subtle.digest('SHA-256', data);
+	return Array.from(new Uint8Array(hash))
+		.map((b) => b.toString(16).padStart(2, '0'))
+		.join('');
+}
 
 export interface GDriveUploadOptions {
 	filename?: string;
@@ -189,7 +219,7 @@ export async function uploadToGDrive(
 
 		// PENTING: Gunakan 'text/plain;charset=utf-8' agar browser tidak mengirim request OPTIONS (CORS preflight)
 		// karena Google Apps Script tidak mendukung OPTIONS preflight.
-		const response = await fetch(GDRIVE_UPLOAD_URL, {
+		const response = await fetch(resolveUploadUrl(), {
 			method: 'POST',
 			headers: {
 				'Content-Type': 'text/plain;charset=utf-8'
@@ -241,14 +271,24 @@ export async function deleteFromGDrive(
 
 	console.log(`[GDrive Bucket] Memulai penghapusan file ID: ${fileId}`);
 
+	const uploadUrl = resolveUploadUrl();
+	const token = await computeDeleteToken(getDeleteSecret(), fileId);
+	if (!token) {
+		return {
+			status: 'error',
+			message: 'Token delete tidak dapat dibuat (secret belum dikonfigurasi).'
+		};
+	}
+
 	// 1. Coba request via POST
 	try {
 		const payload = {
 			action: 'delete',
-			fileId: fileId
+			fileId: fileId,
+			token
 		};
 
-		const response = await fetch(GDRIVE_UPLOAD_URL, {
+		const response = await fetch(uploadUrl, {
 			method: 'POST',
 			headers: {
 				'Content-Type': 'text/plain;charset=utf-8'
@@ -269,7 +309,7 @@ export async function deleteFromGDrive(
 
 	// 2. Fallback via GET parameter (lebih ramah redirect CORS di lingkungan browser tertentu)
 	try {
-		const getUrl = `${GDRIVE_UPLOAD_URL}?action=delete&fileId=${encodeURIComponent(fileId)}`;
+		const getUrl = `${uploadUrl}?action=delete&fileId=${encodeURIComponent(fileId)}&token=${encodeURIComponent(token)}`;
 		const getResponse = await fetch(getUrl, { method: 'GET' });
 		if (getResponse.ok) {
 			const getData = await getResponse.json();
@@ -291,7 +331,7 @@ export async function deleteFromGDrive(
  */
 export async function pingGDriveBucket(): Promise<boolean> {
 	try {
-		const res = await fetch(GDRIVE_UPLOAD_URL, { method: 'GET' });
+		const res = await fetch(resolveUploadUrl(), { method: 'GET' });
 		if (!res.ok) return false;
 		const data = await res.json();
 		return data.status === 'success';
