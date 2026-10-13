@@ -21,7 +21,7 @@ type AuthResponse struct {
 
 type ChangePasswordRequest struct {
 	CurrentPassword string `json:"current_password" binding:"required"`
-	NewPassword     string `json:"new_password" binding:"required,min=6"`
+	NewPassword     string `json:"new_password" binding:"required,min=8"`
 }
 
 type UpdateAccountRequest struct {
@@ -29,5 +29,5 @@ type UpdateAccountRequest struct {
 	Name            *string `json:"name"`
 	Email           *string `json:"email"`
 	CurrentPassword string  `json:"current_password" binding:"required"`
-	NewPassword     *string `json:"new_password"`
+	NewPassword     *string `json:"new_password" binding:"omitempty,min=8"`
 }

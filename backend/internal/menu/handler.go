@@ -97,7 +97,7 @@ func (h *Handler) GetPublicMenu(c *gin.Context) {
 	restoID := c.Param("restaurant_id")
 	catalog, err := h.repo.GetPublicCatalog(c.Request.Context(), restoID)
 	if err != nil {
-		response.InternalServerError(c, "DB_ERROR", err.Error())
+		response.ServerError(c, "DB_ERROR", err)
 		return
 	}
 	response.OK(c, catalog, "Menu catalog retrieved successfully")
@@ -110,7 +110,7 @@ func (h *Handler) GetPublicMenuQuery(c *gin.Context) {
 	}
 	catalog, err := h.repo.GetPublicCatalog(c.Request.Context(), restoID)
 	if err != nil {
-		response.InternalServerError(c, "DB_ERROR", err.Error())
+		response.ServerError(c, "DB_ERROR", err)
 		return
 	}
 	response.OK(c, catalog, "Menu catalog retrieved successfully")
@@ -123,7 +123,7 @@ func (h *Handler) GetPublicCategories(c *gin.Context) {
 	}
 	cats, err := h.repo.ListCategories(c.Request.Context(), restoID)
 	if err != nil {
-		response.InternalServerError(c, "DB_ERROR", err.Error())
+		response.ServerError(c, "DB_ERROR", err)
 		return
 	}
 	response.OK(c, cats, "Categories retrieved successfully")
@@ -134,7 +134,7 @@ func (h *Handler) ListCategories(c *gin.Context) {
 	restoID, _ := c.Get(auth.CtxRestaurantID)
 	categories, err := h.repo.ListCategories(c.Request.Context(), restoID.(string))
 	if err != nil {
-		response.InternalServerError(c, "DB_ERROR", err.Error())
+		response.ServerError(c, "DB_ERROR", err)
 		return
 	}
 	response.OK(c, categories, "Categories retrieved")
@@ -160,7 +160,7 @@ func (h *Handler) CreateCategory(c *gin.Context) {
 	}
 
 	if err := h.repo.CreateCategory(c.Request.Context(), cat); err != nil {
-		response.InternalServerError(c, "CREATE_FAILED", err.Error())
+		response.ServerError(c, "CREATE_FAILED", err)
 		return
 	}
 	response.Created(c, cat, "Category created successfully")
@@ -182,7 +182,7 @@ func (h *Handler) UpdateCategory(c *gin.Context) {
 			response.NotFound(c, "CATEGORY_NOT_FOUND", "Category not found")
 			return
 		}
-		response.InternalServerError(c, "DB_ERROR", err.Error())
+		response.ServerError(c, "DB_ERROR", err)
 		return
 	}
 
@@ -191,7 +191,7 @@ func (h *Handler) UpdateCategory(c *gin.Context) {
 	cat.Status = req.Status
 
 	if err := h.repo.UpdateCategory(c.Request.Context(), cat); err != nil {
-		response.InternalServerError(c, "UPDATE_FAILED", err.Error())
+		response.ServerError(c, "UPDATE_FAILED", err)
 		return
 	}
 	response.OK(c, cat, "Category updated successfully")
@@ -202,7 +202,7 @@ func (h *Handler) DeleteCategory(c *gin.Context) {
 	id := c.Param("id")
 
 	if err := h.repo.DeleteCategory(c.Request.Context(), id, restoID.(string)); err != nil {
-		response.InternalServerError(c, "DELETE_FAILED", err.Error())
+		response.ServerError(c, "DELETE_FAILED", err)
 		return
 	}
 	response.OK(c, gin.H{"deleted": true}, "Category deleted successfully")
@@ -218,7 +218,7 @@ func (h *Handler) ListMenus(c *gin.Context) {
 
 	menus, err := h.repo.ListMenus(c.Request.Context(), restoID.(string), catID)
 	if err != nil {
-		response.InternalServerError(c, "DB_ERROR", err.Error())
+		response.ServerError(c, "DB_ERROR", err)
 		return
 	}
 	response.OK(c, menus, "Menus retrieved")
@@ -234,7 +234,7 @@ func (h *Handler) GetMenu(c *gin.Context) {
 			response.NotFound(c, "MENU_NOT_FOUND", "Menu item not found")
 			return
 		}
-		response.InternalServerError(c, "DB_ERROR", err.Error())
+		response.ServerError(c, "DB_ERROR", err)
 		return
 	}
 	response.OK(c, m, "Menu item retrieved")
@@ -264,7 +264,7 @@ func (h *Handler) CreateMenu(c *gin.Context) {
 	}
 
 	if err := h.repo.CreateMenu(c.Request.Context(), m); err != nil {
-		response.InternalServerError(c, "CREATE_FAILED", err.Error())
+		response.ServerError(c, "CREATE_FAILED", err)
 		return
 	}
 	response.Created(c, m, "Menu item created successfully")
@@ -286,7 +286,7 @@ func (h *Handler) UpdateMenu(c *gin.Context) {
 			response.NotFound(c, "MENU_NOT_FOUND", "Menu item not found")
 			return
 		}
-		response.InternalServerError(c, "DB_ERROR", err.Error())
+		response.ServerError(c, "DB_ERROR", err)
 		return
 	}
 
@@ -299,7 +299,7 @@ func (h *Handler) UpdateMenu(c *gin.Context) {
 	m.SortOrder = req.SortOrder
 
 	if err := h.repo.UpdateMenu(c.Request.Context(), m); err != nil {
-		response.InternalServerError(c, "UPDATE_FAILED", err.Error())
+		response.ServerError(c, "UPDATE_FAILED", err)
 		return
 	}
 	response.OK(c, m, "Menu item updated successfully")
@@ -316,7 +316,7 @@ func (h *Handler) UpdateAvailability(c *gin.Context) {
 	}
 
 	if err := h.repo.UpdateMenuAvailability(c.Request.Context(), id, restoID.(string), req.Available); err != nil {
-		response.InternalServerError(c, "UPDATE_FAILED", err.Error())
+		response.ServerError(c, "UPDATE_FAILED", err)
 		return
 	}
 	response.OK(c, gin.H{"available": req.Available}, "Menu availability updated")
@@ -327,7 +327,7 @@ func (h *Handler) DeleteMenu(c *gin.Context) {
 	id := c.Param("id")
 
 	if err := h.repo.DeleteMenu(c.Request.Context(), id, restoID.(string)); err != nil {
-		response.InternalServerError(c, "DELETE_FAILED", err.Error())
+		response.ServerError(c, "DELETE_FAILED", err)
 		return
 	}
 	response.OK(c, gin.H{"deleted": true}, "Menu item deleted successfully")
@@ -365,7 +365,7 @@ func (h *Handler) CreateModifier(c *gin.Context) {
 	}
 
 	if err := h.repo.CreateModifier(c.Request.Context(), mod); err != nil {
-		response.InternalServerError(c, "CREATE_MODIFIER_FAILED", err.Error())
+		response.ServerError(c, "CREATE_MODIFIER_FAILED", err)
 		return
 	}
 	response.Created(c, mod, "Modifier created successfully")
@@ -376,7 +376,7 @@ func (h *Handler) DeleteModifier(c *gin.Context) {
 	id := c.Param("id")
 
 	if err := h.repo.DeleteModifier(c.Request.Context(), id, restoID.(string)); err != nil {
-		response.InternalServerError(c, "DELETE_FAILED", err.Error())
+		response.ServerError(c, "DELETE_FAILED", err)
 		return
 	}
 	response.OK(c, gin.H{"deleted": true}, "Modifier deleted successfully")

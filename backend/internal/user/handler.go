@@ -12,12 +12,12 @@ import (
 type CreateUserRequest struct {
 	Name     string    `json:"name" binding:"required"`
 	Email    string    `json:"email" binding:"required,email"`
-	Password string    `json:"password" binding:"required,min=6"`
+	Password string    `json:"password" binding:"required,min=8"`
 	Role     auth.Role `json:"role" binding:"required"`
 }
 
 type ResetUserPasswordRequest struct {
-	NewPassword string `json:"new_password" binding:"required,min=6"`
+	NewPassword string `json:"new_password" binding:"required,min=8"`
 }
 
 type Handler struct {
@@ -43,7 +43,7 @@ func (h *Handler) ListUsers(c *gin.Context) {
 	restoID, _ := c.Get(auth.CtxRestaurantID)
 	users, err := h.authRepo.ListByRestaurant(c.Request.Context(), restoID.(string))
 	if err != nil {
-		response.InternalServerError(c, "DB_ERROR", err.Error())
+		response.ServerError(c, "DB_ERROR", err)
 		return
 	}
 
@@ -80,7 +80,7 @@ func (h *Handler) CreateUser(c *gin.Context) {
 
 	hash, err := h.authService.HashPassword(req.Password)
 	if err != nil {
-		response.InternalServerError(c, "HASH_FAILED", err.Error())
+		response.ServerError(c, "HASH_FAILED", err)
 		return
 	}
 
@@ -98,7 +98,7 @@ func (h *Handler) CreateUser(c *gin.Context) {
 	}
 
 	if err := h.authRepo.Create(c.Request.Context(), u); err != nil {
-		response.InternalServerError(c, "CREATE_USER_FAILED", err.Error())
+		response.ServerError(c, "CREATE_USER_FAILED", err)
 		return
 	}
 
@@ -118,7 +118,7 @@ func (h *Handler) DeleteUser(c *gin.Context) {
 	id := c.Param("id")
 
 	if err := h.authRepo.Delete(c.Request.Context(), id, restoID.(string)); err != nil {
-		response.InternalServerError(c, "DELETE_FAILED", err.Error())
+		response.ServerError(c, "DELETE_FAILED", err)
 		return
 	}
 
@@ -159,7 +159,7 @@ func (h *Handler) ResetUserPassword(c *gin.Context) {
 	}
 
 	if err := h.authService.ResetPassword(c.Request.Context(), targetID, req.NewPassword); err != nil {
-		response.InternalServerError(c, "RESET_FAILED", err.Error())
+		response.ServerError(c, "RESET_FAILED", err)
 		return
 	}
 

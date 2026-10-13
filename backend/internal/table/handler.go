@@ -44,7 +44,7 @@ func (h *Handler) GetPublicTableInfo(c *gin.Context) {
 			response.NotFound(c, "TABLE_NOT_FOUND", "Table not found or inactive")
 			return
 		}
-		response.InternalServerError(c, "DB_ERROR", err.Error())
+		response.ServerError(c, "DB_ERROR", err)
 		return
 	}
 
@@ -55,7 +55,7 @@ func (h *Handler) ListTables(c *gin.Context) {
 	restoID, _ := c.Get(auth.CtxRestaurantID)
 	tables, err := h.service.ListTables(c.Request.Context(), restoID.(string))
 	if err != nil {
-		response.InternalServerError(c, "DB_ERROR", err.Error())
+		response.ServerError(c, "DB_ERROR", err)
 		return
 	}
 	response.OK(c, tables, "Tables retrieved successfully")
@@ -71,7 +71,7 @@ func (h *Handler) CreateTable(c *gin.Context) {
 
 	t, err := h.service.CreateTable(c.Request.Context(), restoID.(string), req)
 	if err != nil {
-		response.InternalServerError(c, "CREATE_FAILED", err.Error())
+		response.ServerError(c, "CREATE_FAILED", err)
 		return
 	}
 	response.Created(c, t, "Table created successfully")
@@ -87,7 +87,7 @@ func (h *Handler) GetTable(c *gin.Context) {
 			response.NotFound(c, "TABLE_NOT_FOUND", "Table not found")
 			return
 		}
-		response.InternalServerError(c, "DB_ERROR", err.Error())
+		response.ServerError(c, "DB_ERROR", err)
 		return
 	}
 	response.OK(c, t, "Table retrieved successfully")
@@ -104,7 +104,7 @@ func (h *Handler) UpdateTable(c *gin.Context) {
 
 	t, err := h.service.UpdateTable(c.Request.Context(), id, restoID.(string), req)
 	if err != nil {
-		response.InternalServerError(c, "UPDATE_FAILED", err.Error())
+		response.ServerError(c, "UPDATE_FAILED", err)
 		return
 	}
 	response.OK(c, t, "Table updated successfully")
@@ -115,7 +115,7 @@ func (h *Handler) DeleteTable(c *gin.Context) {
 	id := c.Param("id")
 
 	if err := h.service.DeleteTable(c.Request.Context(), id, restoID.(string)); err != nil {
-		response.InternalServerError(c, "DELETE_FAILED", err.Error())
+		response.ServerError(c, "DELETE_FAILED", err)
 		return
 	}
 	response.OK(c, gin.H{"deleted": true}, "Table deleted successfully")
@@ -127,7 +127,7 @@ func (h *Handler) RegenerateQR(c *gin.Context) {
 
 	newToken, err := h.service.RegenerateQRToken(c.Request.Context(), id, restoID.(string))
 	if err != nil {
-		response.InternalServerError(c, "REGENERATE_FAILED", err.Error())
+		response.ServerError(c, "REGENERATE_FAILED", err)
 		return
 	}
 	response.OK(c, gin.H{"qr_token": newToken}, "QR Token regenerated successfully")
@@ -144,7 +144,7 @@ func (h *Handler) GetQRCodePNG(c *gin.Context) {
 
 	pngBytes, err := h.service.GenerateQRCodePNG(c.Request.Context(), id, restoID.(string), baseURL)
 	if err != nil {
-		response.InternalServerError(c, "QR_GENERATE_FAILED", err.Error())
+		response.ServerError(c, "QR_GENERATE_FAILED", err)
 		return
 	}
 
@@ -164,7 +164,7 @@ func (h *Handler) CreateServiceRequest(c *gin.Context) {
 			response.NotFound(c, "TABLE_NOT_FOUND", "Table not found or inactive")
 			return
 		}
-		response.InternalServerError(c, "SERVICE_REQUEST_FAILED", err.Error())
+		response.ServerError(c, "SERVICE_REQUEST_FAILED", err)
 		return
 	}
 

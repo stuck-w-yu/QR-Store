@@ -34,7 +34,7 @@ func (h *Handler) CreatePayment(c *gin.Context) {
 			response.Conflict(c, "ORDER_ALREADY_PAID", "Order is already paid or completed")
 			return
 		}
-		response.InternalServerError(c, "PAYMENT_CREATION_FAILED", err.Error())
+		response.InternalServerError(c, "PAYMENT_CREATION_FAILED", "Failed to initialize payment")
 		return
 	}
 	response.Created(c, payment, "Payment initialized successfully")
@@ -48,7 +48,7 @@ func (h *Handler) GetPayment(c *gin.Context) {
 			response.NotFound(c, "PAYMENT_NOT_FOUND", "Payment record not found")
 			return
 		}
-		response.InternalServerError(c, "DB_ERROR", err.Error())
+		response.InternalServerError(c, "DB_ERROR", "Failed to retrieve payment")
 		return
 	}
 	response.OK(c, p, "Payment details retrieved")
@@ -62,7 +62,7 @@ func (h *Handler) GetPaymentByOrderID(c *gin.Context) {
 			response.NotFound(c, "PAYMENT_NOT_FOUND", "Payment record not found for this order")
 			return
 		}
-		response.InternalServerError(c, "DB_ERROR", err.Error())
+		response.InternalServerError(c, "DB_ERROR", "Failed to retrieve payment")
 		return
 	}
 	response.OK(c, p, "Payment details retrieved")
@@ -82,7 +82,7 @@ func (h *Handler) HandleWebhook(c *gin.Context) {
 			response.BadRequest(c, "INVALID_PAYMENT_AMOUNT", "Webhook amount does not match order")
 			return
 		}
-		response.Error(c, http.StatusUnauthorized, "INVALID_WEBHOOK", err.Error())
+		response.Error(c, http.StatusUnauthorized, "INVALID_WEBHOOK", "Webhook signature verification failed")
 		return
 	}
 
@@ -110,7 +110,7 @@ func (h *Handler) SimulatePay(c *gin.Context) {
 			response.Conflict(c, "ORDER_ALREADY_PAID", "Order is already paid")
 			return
 		}
-		response.InternalServerError(c, "SIMULATE_PAY_FAILED", err.Error())
+		response.InternalServerError(c, "SIMULATE_PAY_FAILED", "Failed to simulate payment")
 		return
 	}
 

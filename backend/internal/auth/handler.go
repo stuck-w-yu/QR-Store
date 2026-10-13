@@ -123,7 +123,7 @@ func (h *Handler) UpdateAccount(c *gin.Context) {
 			response.BadRequest(c, "ID_EXISTS", "ID pengguna sudah digunakan")
 			return
 		}
-		response.InternalServerError(c, "UPDATE_FAILED", err.Error())
+		response.ServerError(c, "UPDATE_FAILED", err)
 		return
 	}
 

@@ -56,7 +56,7 @@ func (h *Handler) GetByID(c *gin.Context) {
 			response.NotFound(c, "RESTAURANT_NOT_FOUND", "Restaurant not found")
 			return
 		}
-		response.InternalServerError(c, "DB_ERROR", err.Error())
+		response.ServerError(c, "DB_ERROR", err)
 		return
 	}
 
@@ -74,7 +74,7 @@ func (h *Handler) GetPublicBySlug(c *gin.Context) {
 			response.NotFound(c, "RESTAURANT_NOT_FOUND", "Restaurant not found")
 			return
 		}
-		response.InternalServerError(c, "DB_ERROR", err.Error())
+		response.ServerError(c, "DB_ERROR", err)
 		return
 	}
 
@@ -98,7 +98,7 @@ func (h *Handler) Update(c *gin.Context) {
 
 	updated, err := h.repo.Update(c.Request.Context(), id, req)
 	if err != nil {
-		response.InternalServerError(c, "UPDATE_FAILED", err.Error())
+		response.ServerError(c, "UPDATE_FAILED", err)
 		return
 	}
 
@@ -110,7 +110,7 @@ func (h *Handler) Update(c *gin.Context) {
 func (h *Handler) GetPlatformStats(c *gin.Context) {
 	stats, err := h.repo.GetPlatformStats(c.Request.Context())
 	if err != nil {
-		response.InternalServerError(c, "DB_ERROR", err.Error())
+		response.ServerError(c, "DB_ERROR", err)
 		return
 	}
 	response.OK(c, stats, "Platform statistics retrieved successfully")
@@ -119,7 +119,7 @@ func (h *Handler) GetPlatformStats(c *gin.Context) {
 func (h *Handler) ListTenants(c *gin.Context) {
 	tenants, err := h.repo.ListTenants(c.Request.Context())
 	if err != nil {
-		response.InternalServerError(c, "DB_ERROR", err.Error())
+		response.ServerError(c, "DB_ERROR", err)
 		return
 	}
 	response.OK(c, tenants, "Tenants retrieved successfully")
@@ -140,7 +140,7 @@ func (h *Handler) OnboardTenant(c *gin.Context) {
 
 	tenant, err := h.repo.OnboardTenant(c.Request.Context(), req, hash)
 	if err != nil {
-		response.InternalServerError(c, "ONBOARD_FAILED", err.Error())
+		response.ServerError(c, "ONBOARD_FAILED", err)
 		return
 	}
 
@@ -157,7 +157,7 @@ func (h *Handler) UpdateTenant(c *gin.Context) {
 
 	updated, err := h.repo.Update(c.Request.Context(), id, req)
 	if err != nil {
-		response.InternalServerError(c, "UPDATE_FAILED", err.Error())
+		response.ServerError(c, "UPDATE_FAILED", err)
 		return
 	}
 
@@ -167,7 +167,7 @@ func (h *Handler) UpdateTenant(c *gin.Context) {
 func (h *Handler) DeleteTenant(c *gin.Context) {
 	id := c.Param("id")
 	if err := h.repo.Delete(c.Request.Context(), id); err != nil {
-		response.InternalServerError(c, "DELETE_FAILED", err.Error())
+		response.ServerError(c, "DELETE_FAILED", err)
 		return
 	}
 	response.OK(c, nil, "Tenant deleted successfully")
@@ -176,7 +176,7 @@ func (h *Handler) DeleteTenant(c *gin.Context) {
 func (h *Handler) ListRecentOrders(c *gin.Context) {
 	orders, err := h.repo.ListRecentOrders(c.Request.Context(), 50)
 	if err != nil {
-		response.InternalServerError(c, "DB_ERROR", err.Error())
+		response.ServerError(c, "DB_ERROR", err)
 		return
 	}
 	response.OK(c, orders, "Recent platform orders retrieved successfully")
@@ -185,7 +185,7 @@ func (h *Handler) ListRecentOrders(c *gin.Context) {
 func (h *Handler) ListOwners(c *gin.Context) {
 	owners, err := h.repo.ListOwners(c.Request.Context())
 	if err != nil {
-		response.InternalServerError(c, "DB_ERROR", err.Error())
+		response.ServerError(c, "DB_ERROR", err)
 		return
 	}
 	response.OK(c, owners, "Platform owners retrieved successfully")
@@ -194,7 +194,7 @@ func (h *Handler) ListOwners(c *gin.Context) {
 func (h *Handler) GetSystemHealth(c *gin.Context) {
 	health, err := h.repo.GetSystemHealth(c.Request.Context())
 	if err != nil {
-		response.InternalServerError(c, "DB_ERROR", err.Error())
+		response.ServerError(c, "DB_ERROR", err)
 		return
 	}
 	response.OK(c, health, "System diagnostics retrieved successfully")

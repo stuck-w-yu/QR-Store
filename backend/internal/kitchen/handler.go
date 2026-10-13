@@ -37,7 +37,7 @@ func (h *Handler) ListKitchenOrders(c *gin.Context) {
 	restoID, _ := c.Get(auth.CtxRestaurantID)
 	orders, err := h.orderService.ListKitchenOrders(c.Request.Context(), restoID.(string))
 	if err != nil {
-		response.InternalServerError(c, "DB_ERROR", err.Error())
+		response.ServerError(c, "DB_ERROR", err)
 		return
 	}
 	response.OK(c, orders, "Kitchen orders retrieved")
@@ -56,7 +56,7 @@ func (h *Handler) AcceptOrder(c *gin.Context) {
 			response.Conflict(c, "INVALID_STATE", "Order is not in CONFIRMED state")
 			return
 		}
-		response.InternalServerError(c, "UPDATE_FAILED", err.Error())
+		response.ServerError(c, "UPDATE_FAILED", err)
 		return
 	}
 	response.OK(c, gin.H{"status": order.StatusPreparing}, "Order accepted and preparing")
@@ -75,7 +75,7 @@ func (h *Handler) MarkReady(c *gin.Context) {
 			response.Conflict(c, "INVALID_STATE", "Order is not in PREPARING state")
 			return
 		}
-		response.InternalServerError(c, "UPDATE_FAILED", err.Error())
+		response.ServerError(c, "UPDATE_FAILED", err)
 		return
 	}
 	response.OK(c, gin.H{"status": order.StatusReady}, "Order is ready for serving")
@@ -94,7 +94,7 @@ func (h *Handler) ServeOrder(c *gin.Context) {
 			response.Conflict(c, "INVALID_STATE", "Order is not in READY state")
 			return
 		}
-		response.InternalServerError(c, "UPDATE_FAILED", err.Error())
+		response.ServerError(c, "UPDATE_FAILED", err)
 		return
 	}
 	response.OK(c, gin.H{"status": order.StatusServed}, "Order marked as served")
@@ -113,7 +113,7 @@ func (h *Handler) CompleteOrder(c *gin.Context) {
 			response.Conflict(c, "INVALID_STATE", "Order is not in READY or SERVED state")
 			return
 		}
-		response.InternalServerError(c, "UPDATE_FAILED", err.Error())
+		response.ServerError(c, "UPDATE_FAILED", err)
 		return
 	}
 	response.OK(c, gin.H{"status": order.StatusCompleted}, "Order completed")
