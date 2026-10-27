@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-var Log *slog.Logger
+var Log = slog.Default()
 
 type PrettyHandler struct {
 	opts slog.HandlerOptions

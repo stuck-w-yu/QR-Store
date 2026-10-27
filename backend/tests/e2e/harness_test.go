@@ -20,7 +20,13 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 	"qr-store/backend/pkg/database"
+	"qr-store/backend/pkg/logger"
 )
+
+func TestMain(m *testing.M) {
+	logger.Init("test")
+	os.Exit(m.Run())
+}
 
 // testDB connects to TEST_DATABASE_URL, wipes the schema, runs migrations, and
 // returns the pool. It skips the test if no database is configured.
